@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Scion Live</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0e1014;
+      --panel: #161a22;
+      --panel-2: #1f2530;
+      --border: #2a313d;
+      --fg: #e6e9ef;
+      --muted: #8a93a3;
+      --accent: #4cc9f0;
+      --rec: #ef476f;
+      --ok: #06d6a0;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg);
+      color: var(--fg); font: 14px/1.4 -apple-system, "Segoe UI", system-ui, sans-serif;
+      display: flex; flex-direction: column; }
+    header {
+      flex: 0 0 auto;
+      display: flex; align-items: center; gap: 16px;
+      padding: 12px 18px; background: var(--panel); border-bottom: 1px solid var(--border);
+    }
+    header h1 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: .3px; }
+    header .status { color: var(--muted); font-size: 12px; }
+    .layout { flex: 1 1 0; min-height: 0; display: grid;
+      grid-template-columns: 1fr 200px; gap: 16px; padding: 16px; overflow: hidden; }
+    .chart-wrap { background: var(--panel); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px; position: relative; min-height: 0;
+      display: flex; flex-direction: column; }
+    .chart-wrap canvas { flex: 1 1 0; min-height: 0; }
+    .side { display: flex; flex-direction: column; gap: 14px;
+      overflow-y: auto; min-height: 0; }
+    .card { background: var(--panel); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px; }
+    .card h2 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase;
+      letter-spacing: 1px; color: var(--muted); font-weight: 600; }
+    .stats { display: grid; grid-template-columns: 1fr; gap: 5px; }
+    .stat { display: flex; justify-content: space-between; align-items: center;
+      padding: 6px 8px; background: var(--panel-2); border-radius: 6px; }
+    .stat .k { color: var(--muted); font-size: 12px; }
+    .stat .v { font-variant-numeric: tabular-nums; }
+    .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px;
+      margin-right: 6px; vertical-align: middle; }
+    .toggle-group { margin-bottom: 8px; }
+    .toggle-group:last-child { margin-bottom: 0; }
+    .group-header { display: flex; align-items: center; gap: 6px; margin-bottom: 5px;
+      cursor: pointer; user-select: none; }
+    .group-header input { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
+    .group-header span { font-size: 11px; text-transform: uppercase; letter-spacing: .8px;
+      color: var(--muted); font-weight: 600; }
+    .toggles { display: grid; grid-template-columns: 1fr; gap: 4px; }
+    .toggles label { display: flex; align-items: center; gap: 6px; padding: 4px 6px;
+      background: var(--panel-2); border-radius: 6px; cursor: pointer; }
+    button { background: var(--accent); color: #08161d; border: 0; border-radius: 8px;
+      padding: 9px 14px; font-weight: 600; cursor: pointer; }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    button.danger { background: var(--rec); color: #fff; }
+    input[type=text] { width: 100%; padding: 9px 10px; background: var(--panel-2);
+      border: 1px solid var(--border); color: var(--fg); border-radius: 8px; }
+    .rec-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+    .rec-status { font-size: 12px; color: var(--muted); margin-top: 8px; min-height: 16px; }
+    .rec-status.active { color: var(--rec); }
+    .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+      padding: 3px 8px; border-radius: 999px; background: var(--panel-2);
+      color: var(--muted); border: 1px solid var(--border); }
+    .pill.on { color: var(--ok); border-color: rgba(6,214,160,.4); }
+    .pill.rec { color: var(--rec); border-color: rgba(239,71,111,.4); }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+    .row { display: flex; gap: 6px; margin-bottom: 8px; }
+    .row label { color: var(--muted); font-size: 12px; }
+    .session-list { margin-top: 10px; max-height: 260px; overflow: auto;
+      display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+    .session-item { padding: 8px 10px; background: var(--panel-2);
+      border: 1px solid transparent; border-radius: 6px; cursor: pointer;
+      display: flex; flex-direction: column; gap: 2px; }
+    .session-item:hover { border-color: var(--border); }
+    .session-item.active { border-color: var(--accent); background: rgba(76,201,240,.08); }
+    .session-item .name { font-weight: 600; color: var(--fg); overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap; }
+    .session-item .meta { color: var(--muted); font-size: 11px; }
+    .mode-banner { position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+      padding: 6px 14px; background: rgba(76,201,240,.15); color: var(--accent);
+      border: 1px solid rgba(76,201,240,.4); border-radius: 999px;
+      font-size: 12px; font-weight: 600; pointer-events: none; z-index: 2; display: none; }
+    .mode-banner.show { display: block; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Pocket Scion · live</h1>
+    <span id="conn" class="pill"><span class="dot"></span><span>disconnected</span></span>
+    <span id="recPill" class="pill"><span class="dot"></span><span>idle</span></span>
+    <span class="status" id="oscInfo"></span>
+  </header>
+
+  <div class="layout">
+    <div class="chart-wrap">
+      <div id="modeBanner" class="mode-banner"></div>
+      <canvas id="chart"></canvas>
+    </div>
+
+    <aside class="side">
+      <div class="card">
+        <h2>Latest</h2>
+        <div class="stats" id="stats"></div>
+      </div>
+
+      <div class="card">
+        <h2>Series</h2>
+        <div id="toggles"></div>
+        <div class="row" style="margin-top:10px">
+          <label for="window">Window (s)</label>
+        </div>
+        <input id="window" type="text" value="60" />
+        <button id="resetBtn" style="margin-top:10px;width:100%;background:var(--panel-2);color:var(--muted);border:1px solid var(--border)">Reset data</button>
+      </div>
+
+      <div class="card">
+        <h2>Record</h2>
+        <input id="sessionName" type="text" placeholder="session name (optional)" />
+        <div class="rec-row">
+          <button id="recBtn">Record</button>
+          <button id="stopBtn" class="danger" disabled>Stop</button>
+        </div>
+        <div id="recStatus" class="rec-status">Not recording.</div>
+      </div>
+
+      <div class="card">
+        <h2>Playback</h2>
+        <div class="rec-row" style="margin-top:0">
+          <button id="refreshSessions" style="background:var(--panel-2);color:var(--fg);border:1px solid var(--border)">Refresh</button>
+          <button id="liveBtn" disabled>Back to live</button>
+        </div>
+        <div id="sessionList" class="session-list">Loading…</div>
+      </div>
+    </aside>
+  </div>
+
+<script>
+const FIELDS = ['min', 'max', 'mean', 'delta', 'variance', 'deviation'];
+const COLORS = {
+  min:       '#4cc9f0',
+  max:       '#f72585',
+  mean:      '#ffd166',
+  delta:     '#06d6a0',
+  variance:  '#b388ff',
+  deviation: '#ff8c42',
+};
+
+const enabled = Object.fromEntries(FIELDS.map(f => [f, true]));
+const series = Object.fromEntries(FIELDS.map(f => [f, []])); // [{x:ms, y:value}]
+
+const ctx = document.getElementById('chart').getContext('2d');
+const chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    datasets: FIELDS.map(f => ({
+      label: f,
+      data: series[f],
+      borderColor: COLORS[f],
+      backgroundColor: COLORS[f] + '22',
+      borderWidth: 1.6,
+      pointRadius: 0,
+      tension: 0.18,
+      spanGaps: true,
+      parsing: false,
+    })),
+  },
+  options: {
+    animation: false,
+    responsive: true,
+    maintainAspectRatio: false,
+    interaction: { mode: 'nearest', intersect: false },
+    scales: {
+      x: {
+        type: 'linear',
+        bounds: 'ticks',
+        min: Date.now() - 60_000,
+        max: Date.now(),
+        ticks: {
+          color: '#8a93a3',
+          callback: v => new Date(v).toLocaleTimeString(),
+          maxTicksLimit: 6,
+        },
+        grid: { color: '#1f2530' },
+      },
+      y: {
+        ticks: { color: '#8a93a3' },
+        grid: { color: '#1f2530' },
+      },
+    },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          title: (items) => new Date(items[0].parsed.x).toLocaleTimeString(),
+        },
+      },
+    },
+  },
+});
+
+// --- toggles + stats UI ----------------------------------------------------
+const GROUPS = [
+  { label: 'Values',      key: 'values',       fields: ['min', 'max', 'mean'] },
+  { label: 'Variability', key: 'variability',  fields: ['delta', 'variance', 'deviation'] },
+];
+
+const LS_KEY = 'scion-toggles';
+function loadPrefs() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch { return {}; }
+}
+function savePrefs() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(enabled)); } catch {}
+}
+
+// Seed enabled map from saved prefs (default true for anything not stored).
+const savedPrefs = loadPrefs();
+for (const f of FIELDS) {
+  if (f in savedPrefs) enabled[f] = savedPrefs[f];
+}
+
+const togglesEl = document.getElementById('toggles');
+const statsEl   = document.getElementById('stats');
+
+GROUPS.forEach(({ label, key, fields }) => {
+  const groupDiv = document.createElement('div');
+  groupDiv.className = 'toggle-group';
+
+  // Group header with tri-state checkbox.
+  const hdr = document.createElement('div');
+  hdr.className = 'group-header';
+  const hdrCb = document.createElement('input');
+  hdrCb.type = 'checkbox';
+  hdrCb.id = `group-${key}`;
+  const allOn = fields.every(f => enabled[f]);
+  const anyOn = fields.some(f => enabled[f]);
+  hdrCb.checked = allOn;
+  hdrCb.indeterminate = !allOn && anyOn;
+  const hdrSpan = document.createElement('span');
+  hdrSpan.textContent = label;
+  hdr.appendChild(hdrCb);
+  hdr.appendChild(hdrSpan);
+  groupDiv.appendChild(hdr);
+
+  // Per-field toggle grid.
+  const grid = document.createElement('div');
+  grid.className = 'toggles';
+
+  fields.forEach(f => {
+    const i = FIELDS.indexOf(f);
+    const lab = document.createElement('label');
+    lab.innerHTML =
+      `<input type="checkbox" data-field="${f}" ${enabled[f] ? 'checked' : ''} />` +
+      `<span class="swatch" style="background:${COLORS[f]}"></span>${f}`;
+
+    lab.querySelector('input').addEventListener('change', (e) => {
+      enabled[f] = e.target.checked;
+      chart.data.datasets[i].hidden = !enabled[f];
+      chart.update('none');
+      savePrefs();
+      const allChecked = fields.every(g => enabled[g]);
+      const anyChecked = fields.some(g => enabled[g]);
+      hdrCb.checked = allChecked;
+      hdrCb.indeterminate = !allChecked && anyChecked;
+    });
+    grid.appendChild(lab);
+
+    // Apply saved state immediately.
+    chart.data.datasets[i].hidden = !enabled[f];
+  });
+
+  hdrCb.addEventListener('change', () => {
+    const val = hdrCb.checked;
+    hdrCb.indeterminate = false;
+    fields.forEach(f => {
+      enabled[f] = val;
+      chart.data.datasets[FIELDS.indexOf(f)].hidden = !val;
+      const cb = grid.querySelector(`input[data-field="${f}"]`);
+      if (cb) cb.checked = val;
+    });
+    chart.update('none');
+    savePrefs();
+  });
+
+  groupDiv.appendChild(grid);
+  togglesEl.appendChild(groupDiv);
+});
+
+// Stats panel.
+FIELDS.forEach(f => {
+  const stat = document.createElement('div');
+  stat.className = 'stat';
+  stat.innerHTML =
+    `<span class="k"><span class="swatch" style="background:${COLORS[f]}"></span>${f}</span>` +
+    `<span class="v" id="v-${f}">—</span>`;
+  statsEl.appendChild(stat);
+});
+
+function fmt(v) {
+  if (v === null || v === undefined || Number.isNaN(v)) return '—';
+  if (Math.abs(v) >= 1000 || (Math.abs(v) > 0 && Math.abs(v) < 0.01)) return v.toExponential(3);
+  return v.toFixed(4);
+}
+
+function setLatest(field, value) {
+  const el = document.getElementById('v-' + field);
+  if (el) el.textContent = fmt(value);
+}
+
+// --- windowing -------------------------------------------------------------
+const windowInput = document.getElementById('window');
+function windowMs() {
+  const n = parseFloat(windowInput.value);
+  return Number.isFinite(n) && n > 0 ? n * 1000 : 60_000;
+}
+
+// --- spike filter ----------------------------------------------------------
+// EMA-based outlier rejection: accepts a value only if its z-score against the
+// per-field exponential moving mean/variance is within SPIKE_THRESH.
+// Protects the chart from sensor connect/disconnect transients.
+const SPIKE_THRESH = 6.0;   // z-score limit; increase to be more permissive
+const SPIKE_ALPHA  = 0.10;  // EMA smoothing (window ≈ 1/alpha = 10 samples)
+const SPIKE_WARMUP = 5;     // samples accepted unconditionally to seed the filter
+
+const spikeState = Object.fromEntries(
+  FIELDS.map(f => [f, { n: 0, ema: null, emv: 0 }])
+);
+
+function acceptSample(field, value) {
+  const s = spikeState[field];
+  if (!Number.isFinite(value)) return false;
+  if (s.ema === null) {
+    s.ema = value; s.n = 1; return true;
+  }
+  if (s.n < SPIKE_WARMUP) {
+    const delta = value - s.ema;
+    s.ema += SPIKE_ALPHA * delta;
+    s.emv  = (1 - SPIKE_ALPHA) * (s.emv + SPIKE_ALPHA * delta * delta);
+    s.n++;
+    return true;
+  }
+  const stddev = Math.sqrt(s.emv);
+  if (stddev > 0 && Math.abs(value - s.ema) > SPIKE_THRESH * stddev) {
+    return false; // spike — reject, do not update filter state
+  }
+  const delta = value - s.ema;
+  s.ema += SPIKE_ALPHA * delta;
+  s.emv  = (1 - SPIKE_ALPHA) * (s.emv + SPIKE_ALPHA * delta * delta);
+  s.n++;
+  return true;
+}
+
+// Mode: 'live' = rolling-window of incoming samples; 'playback' = static history.
+let mode = 'live';
+let activeSession = null;
+
+function pushSample(field, value, ts) {
+  if (!FIELDS.includes(field)) return;
+  if (!acceptSample(field, value)) return; // spike — discard entirely
+  setLatest(field, value);
+  // In playback mode: keep stats panel current but don't touch the chart series.
+  if (mode !== 'live') return;
+  series[field].push({ x: ts, y: value });
+}
+
+// Continuous render loop — decouples chart redraws from OSC arrival rate.
+// Pins the x-axis bounds every frame so the canvas always fills completely.
+let lastRender = 0;
+function renderLoop(ts) {
+  requestAnimationFrame(renderLoop);
+  if (ts - lastRender < 33) return; // ~30 fps cap
+  lastRender = ts;
+
+  if (mode === 'live') {
+    const now = Date.now();
+    const cutoff = now - windowMs();
+    for (const f of FIELDS) {
+      const arr = series[f];
+      let drop = 0;
+      while (drop < arr.length && arr[drop].x < cutoff) drop++;
+      if (drop) arr.splice(0, drop);
+    }
+    chart.options.scales.x.min = cutoff;
+    chart.options.scales.x.max = now;
+  }
+  chart.update('none');
+}
+requestAnimationFrame(renderLoop);
+
+// --- WebSocket -------------------------------------------------------------
+const connPill = document.getElementById('conn');
+function setConn(state) {
+  connPill.classList.toggle('on', state === 'on');
+  connPill.querySelector('span:last-child').textContent =
+    state === 'on' ? 'connected' : 'disconnected';
+}
+
+let ws;
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws`);
+  ws.onopen = () => setConn('on');
+  ws.onclose = () => { setConn('off'); setTimeout(connect, 1000); };
+  ws.onerror = () => ws.close();
+  ws.onmessage = (e) => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'sample') {
+      pushSample(msg.field, msg.value, msg.ts);
+    } else if (msg.type === 'hello') {
+      if (msg.latest) {
+        for (const f of FIELDS) if (msg.latest[f] != null) setLatest(f, msg.latest[f]);
+      }
+      if (msg.recording) renderRecording(msg.recording);
+    } else if (msg.type === 'recording') {
+      renderRecording(msg.recording);
+    }
+  };
+}
+connect();
+
+// --- recording UI ----------------------------------------------------------
+const recBtn = document.getElementById('recBtn');
+const stopBtn = document.getElementById('stopBtn');
+const recStatus = document.getElementById('recStatus');
+const sessionName = document.getElementById('sessionName');
+const recPill = document.getElementById('recPill');
+
+let _wasRecording = false;
+function renderRecording(rec) {
+  const active = rec && rec.active;
+  recBtn.disabled = active;
+  stopBtn.disabled = !active;
+  recPill.classList.toggle('rec', active);
+  recPill.querySelector('span:last-child').textContent = active ? 'recording' : 'idle';
+  if (active) {
+    recStatus.classList.add('active');
+    const elapsed = ((Date.now() - rec.startedAt) / 1000) | 0;
+    recStatus.textContent =
+      `● ${rec.session} · ${elapsed}s · ${rec.pointsWritten} pts`;
+  } else {
+    recStatus.classList.remove('active');
+    recStatus.textContent = 'Not recording.';
+  }
+  if (_wasRecording && !active && typeof loadSessions === 'function') {
+    loadSessions();
+  }
+  _wasRecording = active;
+}
+
+async function api(path, body) {
+  const r = await fetch(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || r.statusText);
+  return data;
+}
+
+recBtn.addEventListener('click', async () => {
+  try {
+    await api('/api/record/start', { session: sessionName.value.trim() || undefined });
+  } catch (err) {
+    recStatus.textContent = 'Error: ' + err.message;
+  }
+});
+stopBtn.addEventListener('click', async () => {
+  try {
+    await api('/api/record/stop');
+  } catch (err) {
+    recStatus.textContent = 'Error: ' + err.message;
+  }
+});
+
+// Periodically refresh recording status from server so elapsed time + count tick.
+setInterval(async () => {
+  try {
+    const r = await fetch('/api/status').then(r => r.json());
+    if (r.recording && r.recording.active) renderRecording(r.recording);
+    document.getElementById('oscInfo').textContent =
+      `OSC udp://${r.osc.host}:${r.osc.port} · Influx ${r.influx.configured ? r.influx.bucket + '@' + r.influx.org : 'NOT CONFIGURED'}`;
+  } catch (_) {}
+}, 1000);
+
+// --- playback --------------------------------------------------------------
+const sessionListEl = document.getElementById('sessionList');
+const refreshBtn = document.getElementById('refreshSessions');
+const liveBtn = document.getElementById('liveBtn');
+const modeBanner = document.getElementById('modeBanner');
+
+function fmtRelative(ms) {
+  const s = Math.max(0, (Date.now() - ms) / 1000) | 0;
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return (s / 60 | 0) + 'm ago';
+  if (s < 86400) return (s / 3600 | 0) + 'h ago';
+  return (s / 86400 | 0) + 'd ago';
+}
+
+function fmtDuration(ms) {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return s + 's';
+  if (s < 3600) return (s / 60).toFixed(1) + 'm';
+  return (s / 3600).toFixed(1) + 'h';
+}
+
+async function loadSessions() {
+  sessionListEl.textContent = 'Loading…';
+  try {
+    const r = await fetch('/api/sessions').then(r => r.json());
+    if (!r.sessions || !r.sessions.length) {
+      sessionListEl.textContent = 'No recorded sessions yet.';
+      return;
+    }
+    sessionListEl.innerHTML = '';
+    for (const s of r.sessions) {
+      const div = document.createElement('div');
+      div.className = 'session-item';
+      if (activeSession === s.session) div.classList.add('active');
+      div.dataset.session = s.session;
+      div.innerHTML =
+        `<span class="name">${escapeHtml(s.session)}</span>` +
+        `<span class="meta">${fmtRelative(s.endMs)} · ${fmtDuration(s.endMs - s.startMs)} · ${s.points} pts</span>`;
+      div.addEventListener('click', () => loadSession(s.session));
+      sessionListEl.appendChild(div);
+    }
+  } catch (err) {
+    sessionListEl.textContent = 'Error: ' + err.message;
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+async function loadSession(name) {
+  modeBanner.textContent = 'loading ' + name + '…';
+  modeBanner.classList.add('show');
+  try {
+    const r = await fetch('/api/sessions/' + encodeURIComponent(name)).then(async (r) => {
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || r.statusText);
+      return d;
+    });
+    mode = 'playback';
+    activeSession = name;
+    for (const f of FIELDS) {
+      series[f].length = 0;
+      if (r.series[f]) series[f].push(...r.series[f]);
+    }
+    // Pin x-axis to the session's exact time range so it fills the canvas.
+    chart.options.scales.x.min = r.startMs;
+    chart.options.scales.x.max = r.endMs;
+    liveBtn.disabled = false;
+    const everyLabel = r.every ? ` · agg ${r.every}` : '';
+    modeBanner.textContent = `PLAYBACK · ${name} · ${fmtDuration(r.endMs - r.startMs)} · ${r.points} pts${everyLabel}`;
+    // Mark active in list.
+    for (const el of sessionListEl.querySelectorAll('.session-item')) {
+      el.classList.toggle('active', el.dataset.session === name);
+    }
+  } catch (err) {
+    modeBanner.textContent = 'Error: ' + err.message;
+    setTimeout(() => { if (mode === 'live') modeBanner.classList.remove('show'); }, 3000);
+  }
+}
+
+function resetSpikeFilter() {
+  for (const f of FIELDS) Object.assign(spikeState[f], { n: 0, ema: null, emv: 0 });
+}
+
+function returnToLive() {
+  mode = 'live';
+  activeSession = null;
+  for (const f of FIELDS) series[f].length = 0;
+  chart.update('none');
+  liveBtn.disabled = true;
+  modeBanner.classList.remove('show');
+  for (const el of sessionListEl.querySelectorAll('.session-item')) {
+    el.classList.remove('active');
+  }
+}
+
+document.getElementById('resetBtn').addEventListener('click', () => {
+  resetSpikeFilter();
+  returnToLive();
+});
+
+refreshBtn.addEventListener('click', loadSessions);
+liveBtn.addEventListener('click', returnToLive);
+loadSessions();
+</script>
+</body>
+</html>

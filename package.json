@@ -1,0 +1,19 @@
+{
+  "name": "scion-db",
+  "version": "0.1.0",
+  "description": "Live graph + InfluxDB recorder for OSC stats from a Pocket Scion device",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "synth": "node tools/synth-osc.js"
+  },
+  "dependencies": {
+    "@influxdata/influxdb-client": "^1.35.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "osc": "^2.4.5",
+    "ws": "^8.18.0"
+  }
+}
