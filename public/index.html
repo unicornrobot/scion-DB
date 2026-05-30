@@ -89,6 +89,15 @@
       border: 1px solid rgba(76,201,240,.4); border-radius: 999px;
       font-size: 12px; font-weight: 600; pointer-events: none; z-index: 2; display: none; }
     .mode-banner.show { display: block; }
+    .fs-btn { position: absolute; top: 10px; right: 10px; z-index: 3;
+      background: rgba(30,36,46,.75); border: 1px solid var(--border);
+      color: var(--muted); border-radius: 6px; padding: 4px 7px;
+      font-size: 15px; line-height: 1; cursor: pointer; backdrop-filter: blur(4px); }
+    .fs-btn:hover { color: var(--fg); border-color: var(--muted); }
+    body.fullscreen header,
+    body.fullscreen .side { display: none; }
+    body.fullscreen .layout { grid-template-columns: 1fr; padding: 0; gap: 0; }
+    body.fullscreen .chart-wrap { border-radius: 0; border: none; padding: 8px; }
   </style>
 </head>
 <body>
@@ -102,6 +111,7 @@
   <div class="layout">
     <div class="chart-wrap">
       <div id="modeBanner" class="mode-banner"></div>
+      <button class="fs-btn" id="fsBtn" title="Toggle fullscreen">⛶</button>
       <canvas id="chart"></canvas>
     </div>
 
@@ -305,8 +315,8 @@ FIELDS.forEach(f => {
 
 function fmt(v) {
   if (v === null || v === undefined || Number.isNaN(v)) return '—';
-  if (Math.abs(v) >= 1000 || (Math.abs(v) > 0 && Math.abs(v) < 0.01)) return v.toExponential(3);
-  return v.toFixed(4);
+  if (Math.abs(v) >= 1000 || (Math.abs(v) > 0 && Math.abs(v) < 0.001)) return v.toExponential(3);
+  return v.toFixed(3);
 }
 
 function setLatest(field, value) {
@@ -596,6 +606,21 @@ document.getElementById('resetBtn').addEventListener('click', () => {
 refreshBtn.addEventListener('click', loadSessions);
 liveBtn.addEventListener('click', returnToLive);
 loadSessions();
+
+// --- fullscreen toggle -----------------------------------------------------
+const fsBtn = document.getElementById('fsBtn');
+function setFullscreen(on) {
+  document.body.classList.toggle('fullscreen', on);
+  fsBtn.textContent = on ? '✕' : '⛶';
+  fsBtn.title = on ? 'Exit fullscreen (Esc / F)' : 'Fullscreen (F)';
+  // Let Chart.js know the container size changed.
+  chart.resize();
+}
+fsBtn.addEventListener('click', () => setFullscreen(!document.body.classList.contains('fullscreen')));
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.body.classList.contains('fullscreen')) setFullscreen(false);
+  if (e.key === 'f' && e.target.tagName !== 'INPUT') setFullscreen(!document.body.classList.contains('fullscreen'));
+});
 </script>
 </body>
 </html>
