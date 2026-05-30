@@ -109,6 +109,8 @@ async function flushAndCloseWriteApi() {
 const app = express();
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+app.get('/viz', (_req, res) =>
+  res.sendFile(path.join(__dirname, 'public', 'viz.html')));
 
 app.get('/api/status', (_req, res) => {
   res.json({

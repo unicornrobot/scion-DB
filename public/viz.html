@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Scion · Visualizer</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root {
+      --bg:     #0e1014;
+      --panel:  rgba(22,26,34,.80);
+      --border: #2a313d;
+      --fg:     #e6e9ef;
+      --muted:  #8a93a3;
+      --accent: #4cc9f0;
+      --ok:     #06d6a0;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); }
+    canvas#viz { display: block; width: 100%; height: 100%; }
+
+    header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 10;
+      display: flex; align-items: center; gap: 12px; padding: 8px 16px;
+      background: var(--panel); border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(8px);
+      font: 13px/1.4 -apple-system, "Segoe UI", system-ui, sans-serif;
+      color: var(--fg);
+    }
+    header h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: .3px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted);
+      flex-shrink: 0; transition: background .4s; }
+    .dot.live { background: var(--ok); }
+    .conn-label { font-size: 12px; color: var(--muted); }
+    .conn-label.live { color: var(--ok); }
+
+    .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px;
+      padding: 3px 8px; border-radius: 999px; background: rgba(30,36,46,.75);
+      color: var(--muted); border: 1px solid var(--border); }
+
+    select, .btn {
+      background: rgba(30,36,46,.75); border: 1px solid var(--border);
+      color: var(--muted); border-radius: 6px; padding: 4px 10px;
+      font-size: 13px; cursor: pointer; text-decoration: none;
+      display: inline-flex; align-items: center;
+    }
+    select:hover, .btn:hover { color: var(--fg); border-color: var(--muted); }
+    .spacer { flex: 1; }
+
+    /* Live data readout overlay (bottom-left) */
+    #dataReadout {
+      position: fixed; bottom: 14px; left: 16px; z-index: 10;
+      display: grid; grid-template-columns: auto auto auto auto auto auto;
+      gap: 6px 14px;
+      font: 11px/1.4 "SF Mono", "Fira Code", monospace;
+      color: var(--muted);
+      pointer-events: none;
+      opacity: 0.7;
+    }
+    #dataReadout .field { color: var(--fg); }
+    #dataReadout .val   { text-align: right; font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Scion · Visualizer</h1>
+    <span class="dot" id="connDot"></span>
+    <span class="conn-label" id="connLabel">connecting…</span>
+    <select id="vizPicker">
+      <option value="organic">Organic Growth</option>
+    </select>
+    <span class="spacer"></span>
+    <a href="/" class="btn">← Chart</a>
+  </header>
+
+  <canvas id="viz"></canvas>
+
+  <div id="dataReadout">
+    <span class="field">min</span>   <span class="val" id="dr-min">—</span>
+    <span class="field">max</span>   <span class="val" id="dr-max">—</span>
+    <span class="field">mean</span>  <span class="val" id="dr-mean">—</span>
+    <span class="field">delta</span> <span class="val" id="dr-delta">—</span>
+    <span class="field">var</span>   <span class="val" id="dr-variance">—</span>
+    <span class="field">dev</span>   <span class="val" id="dr-deviation">—</span>
+  </div>
+
+  <script src="/js/viz-engine.js"></script>
+  <script src="/js/visualizers/organic-growth.js"></script>
+  <script>
+    // ── Boot ──────────────────────────────────────────────────────────────
+    const canvas = document.getElementById('viz');
+    const engine = new VizEngine(canvas);
+
+    engine.register('organic', new OrganicGrowthVisualizer());
+    engine.activate('organic');
+
+    document.getElementById('vizPicker').addEventListener('change', (e) => {
+      engine.activate(e.target.value);
+    });
+
+    engine.onConnectionChange = (live) => {
+      document.getElementById('connDot').classList.toggle('live', live);
+      document.getElementById('connLabel').classList.toggle('live', live);
+      document.getElementById('connLabel').textContent = live ? 'live' : 'reconnecting…';
+    };
+
+    // ── Data readout (ticks ~4×/s, reads from engine.state.smooth) ────────
+    function fmt(v) {
+      if (v === null || v === undefined) return '—';
+      const a = Math.abs(v);
+      if (a >= 1000 || (a > 0 && a < 0.001)) return v.toExponential(2);
+      return v.toFixed(3);
+    }
+
+    setInterval(() => {
+      const s = engine.state.smooth;
+      document.getElementById('dr-min').textContent       = fmt(s.min);
+      document.getElementById('dr-max').textContent       = fmt(s.max);
+      document.getElementById('dr-mean').textContent      = fmt(s.mean);
+      document.getElementById('dr-delta').textContent     = fmt(s.delta);
+      document.getElementById('dr-variance').textContent  = fmt(s.variance);
+      document.getElementById('dr-deviation').textContent = fmt(s.deviation);
+    }, 250);
+  </script>
+</body>
+</html>
