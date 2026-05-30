@@ -32,8 +32,8 @@
       grid-template-columns: 1fr 200px; gap: 16px; padding: 16px; overflow: hidden; }
     .chart-wrap { background: var(--panel); border: 1px solid var(--border);
       border-radius: 10px; padding: 12px; position: relative; min-height: 0;
-      display: flex; flex-direction: column; }
-    .chart-wrap canvas { flex: 1 1 0; min-height: 0; }
+      display: flex; flex-direction: column; overflow: hidden; }
+    .chart-wrap canvas { flex: 1 1 0; min-height: 0; min-width: 0; }
     .side { display: flex; flex-direction: column; gap: 14px;
       overflow-y: auto; min-height: 0; }
     .card { background: var(--panel); border: 1px solid var(--border);
@@ -94,10 +94,10 @@
       color: var(--muted); border-radius: 6px; padding: 4px 7px;
       font-size: 15px; line-height: 1; cursor: pointer; backdrop-filter: blur(4px); }
     .fs-btn:hover { color: var(--fg); border-color: var(--muted); }
-    body.fullscreen header,
-    body.fullscreen .side { display: none; }
-    body.fullscreen .layout { grid-template-columns: 1fr; padding: 0; gap: 0; }
-    body.fullscreen .chart-wrap { border-radius: 0; border: none; padding: 8px; }
+    .header-btn { background: rgba(30,36,46,.75); border: 1px solid var(--border);
+      color: var(--muted); border-radius: 6px; padding: 4px 9px;
+      font-size: 13px; line-height: 1; cursor: pointer; }
+    .header-btn:hover { color: var(--fg); border-color: var(--muted); }
   </style>
 </head>
 <body>
@@ -105,7 +105,8 @@
     <h1>Pocket Scion · live</h1>
     <span id="conn" class="pill"><span class="dot"></span><span>disconnected</span></span>
     <span id="recPill" class="pill"><span class="dot"></span><span>idle</span></span>
-    <span class="status" id="oscInfo"></span>
+    <span class="status" id="oscInfo" style="flex:1"></span>
+    <button id="sidebarBtn" class="header-btn" title="Toggle sidebar">◀</button>
   </header>
 
   <div class="layout">
@@ -607,19 +608,72 @@ refreshBtn.addEventListener('click', loadSessions);
 liveBtn.addEventListener('click', returnToLive);
 loadSessions();
 
-// --- fullscreen toggle -----------------------------------------------------
-const fsBtn = document.getElementById('fsBtn');
-function setFullscreen(on) {
-  document.body.classList.toggle('fullscreen', on);
-  fsBtn.textContent = on ? '✕' : '⛶';
-  fsBtn.title = on ? 'Exit fullscreen (Esc / F)' : 'Fullscreen (F)';
-  // Let Chart.js know the container size changed.
-  chart.resize();
+// --- sidebar + fullscreen toggle -------------------------------------------
+const fsBtn       = document.getElementById('fsBtn');
+const sidebarBtn  = document.getElementById('sidebarBtn');
+const asideEl     = document.querySelector('aside.side');
+const headerEl    = document.querySelector('header');
+const layoutEl    = document.querySelector('.layout');
+const chartWrapEl = document.querySelector('.chart-wrap');
+
+let sidebarOpen             = true;
+let isFullscreen            = false;
+let sidebarBeforeFullscreen = true;
+
+function applyLayout() {
+  const canvas = document.getElementById('chart');
+
+  // Apply all DOM/style changes.
+  const showSide = sidebarOpen && !isFullscreen;
+  asideEl.style.display              = showSide ? '' : 'none';
+  layoutEl.style.gridTemplateColumns = showSide ? '1fr 200px' : '1fr';
+  sidebarBtn.textContent             = sidebarOpen ? '◀' : '▶';
+  headerEl.style.display             = isFullscreen ? 'none' : '';
+  layoutEl.style.padding             = isFullscreen ? '0' : '';
+  layoutEl.style.gap                 = isFullscreen ? '0' : '';
+  chartWrapEl.style.borderRadius     = isFullscreen ? '0' : '';
+  chartWrapEl.style.border           = isFullscreen ? 'none' : '';
+  chartWrapEl.style.padding          = isFullscreen ? '8px' : '';
+
+  // Zero the canvas inline dimensions so the stale pixel values don't prevent
+  // the chart-wrap from collapsing to its new CSS size during the reflow.
+  canvas.style.width  = '0';
+  canvas.style.height = '0';
+
+  // Force a synchronous layout reflow.  After this, chartWrapEl.clientWidth
+  // reflects the new grid/flex dimensions — not the old canvas size.
+  void chartWrapEl.offsetWidth;
+
+  // Compute the exact drawable area and hand it to Chart.js explicitly so it
+  // never has to guess the container size from a potentially stale canvas.
+  const cs = getComputedStyle(chartWrapEl);
+  const pw = parseFloat(cs.paddingLeft)  + parseFloat(cs.paddingRight);
+  const ph = parseFloat(cs.paddingTop)   + parseFloat(cs.paddingBottom);
+  const w  = Math.max(1, chartWrapEl.clientWidth  - pw);
+  const h  = Math.max(1, chartWrapEl.clientHeight - ph);
+  chart.resize(w, h);
 }
-fsBtn.addEventListener('click', () => setFullscreen(!document.body.classList.contains('fullscreen')));
+
+function setSidebar(open) {
+  sidebarOpen = open;
+  applyLayout();
+}
+
+function setFullscreen(on) {
+  if (on === isFullscreen) return;
+  if (on) sidebarBeforeFullscreen = sidebarOpen;
+  isFullscreen = on;
+  if (!on) sidebarOpen = sidebarBeforeFullscreen;
+  fsBtn.textContent = on ? '✕' : '⛶';
+  fsBtn.title       = on ? 'Exit fullscreen' : 'Fullscreen (F)';
+  applyLayout();
+}
+
+sidebarBtn.addEventListener('click', () => setSidebar(!sidebarOpen));
+fsBtn.addEventListener('click', () => setFullscreen(!isFullscreen));
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && document.body.classList.contains('fullscreen')) setFullscreen(false);
-  if (e.key === 'f' && e.target.tagName !== 'INPUT') setFullscreen(!document.body.classList.contains('fullscreen'));
+  if (e.key === 'Escape' && isFullscreen) setFullscreen(false);
+  if (e.key === 'f' && e.target.tagName !== 'INPUT') setFullscreen(!isFullscreen);
 });
 </script>
 </body>
