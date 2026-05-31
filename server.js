@@ -8,7 +8,7 @@ const osc = require('osc');
 const { InfluxDB, Point } = require('@influxdata/influxdb-client');
 
 const OSC_HOST = process.env.OSC_HOST || '0.0.0.0';
-const OSC_PORT = parseInt(process.env.OSC_PORT || '11045', 10);
+const OSC_PORT = parseInt(process.env.OSC_PORT || '11046', 10);
 const HTTP_PORT = parseInt(process.env.HTTP_PORT || '3000', 10);
 
 const INFLUX_URL = process.env.INFLUX_URL || 'http://127.0.0.1:8086';
