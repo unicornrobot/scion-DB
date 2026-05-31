@@ -1,23 +1,33 @@
 /**
  * Sacred Geometry — Change-Driven Spiral Visualizer
  *
- * An Archimedean spiral drawn outward from the centre.  It only advances
- * while the watched field is actively changing frame-to-frame; when the
- * signal is still the drawing freezes completely.
- *
- * When the spiral tip reaches the canvas boundary it wraps silently back
- * to the centre, leaving all prior rings intact and layering new ones on top.
- *
  * Public config (read/written by the admin panel):
  *   watchField   — which smoothed field to monitor for change  (default: 'mean')
- *   sensitivity  — minimum per-frame Δ to count as "changing"  (default: 0.02)
+ *   sensitivity  — minimum per-frame Δ to count as "changing"  (default: 0.001)
  *   sparkField   — field driving radial spark length            (default: 'deviation')
+ *   sparkScale   — exaggeration multiplier for spark length     (default: 1.0)
+ *   palette      — colour palette name                          (default: 'aurora')
  */
+
+// Harmonic colour palettes — each maps normalised intensity (0→1) to a hue
+// and lightness range.  Low intensity = h0/l0; high intensity = h1/l1.
+const SACRED_PALETTES = {
+  aurora:   { h0: 160, h1: 280, s: 80, l0: 38, l1: 88 },  // teal → violet
+  fire:     { h0:   0, h1:  55, s: 92, l0: 38, l1: 90 },  // red  → gold
+  ocean:    { h0: 195, h1: 240, s: 78, l0: 36, l1: 82 },  // cyan → indigo
+  solar:    { h0:  30, h1:  82, s: 88, l0: 45, l1: 95 },  // amber → lime
+  void:     { h0: 255, h1: 330, s: 65, l0: 26, l1: 78 },  // indigo → rose
+  prism:    { h0:   0, h1: 330, s: 82, l0: 46, l1: 88 },  // full spectrum
+};
 class SacredSpiralVisualizer {
   constructor() {
     this.watchField  = 'mean';
-    this.sensitivity = 0.02;
+    this.sensitivity = 0.001;
     this.sparkField  = 'deviation';
+    this.sparkScale  = 1.0;
+    this.palette     = 'aurora';
+    this.sparkStyle  = 'lines';  // 'lines' | 'points'
+    this.showRings   = true;
 
     this._angle      = 0;
     this._trail      = null;
@@ -25,6 +35,8 @@ class SacredSpiralVisualizer {
     this._lastPt     = null;
     this._prevSmooth = {};
     this._changeMag  = 0;   // exposed so the admin panel can read it live
+    this._sparkPeak  = 0.001; // running max of spark field — auto-calibrates scale
+    this._sparkTip   = null;  // last computed spark tip position
     this._w = 0;
     this._h = 0;
   }
@@ -45,6 +57,7 @@ class SacredSpiralVisualizer {
     this._lastPt     = null;
     this._angle      = 0;
     this._changeMag  = 0;
+    this._sparkPeak  = 0.001;
     this._prevSmooth = {};
   }
 
@@ -55,8 +68,9 @@ class SacredSpiralVisualizer {
   }
 
   clearTrail() {
-    this._angle  = 0;
-    this._lastPt = null;
+    this._angle     = 0;
+    this._lastPt    = null;
+    this._sparkPeak = 0.001;
     this._initTrail(this._w, this._h);
   }
 
@@ -101,15 +115,22 @@ class SacredSpiralVisualizer {
     for (const f of FIELDS) this._prevSmooth[f] = sm[f];
 
     if (moving) {
-      this._angle += 0.06 * dt * 60;
+      // Advance by a fixed arc length so mark spacing stays constant at all radii.
+      // Dividing by r means the angle step shrinks as the spiral widens —
+      // each outer ring naturally takes longer to complete.
+      const r          = 10 + (this._ringSpacing() * this._angle) / (Math.PI * 2);
+      this._angle     += (2.0 / Math.max(r, 1)) * dt * 60;
 
       // Edge wrap: when tip hits the boundary, restart from centre without
       // clearing the trail so new rings layer silently over old ones.
-      const r   = 10 + (this._ringSpacing() * this._angle) / (Math.PI * 2);
-      const max = Math.min(w, h) * 0.46;
+      const maxSparkLen = this._ringSpacing() * 3 * this.sparkScale;
+      const max        = Math.min(w, h) * 0.5 - maxSparkLen;
       if (r > max) {
         this._angle  = 0;
         this._lastPt = null;    // break the line — don't draw edge-to-centre
+        // Pick a new random palette each time the spiral wraps
+        const keys = Object.keys(SACRED_PALETTES);
+        this.palette = keys[Math.floor(Math.random() * keys.length)];
       }
 
       this._appendPt(cx, cy, sm);
@@ -122,17 +143,29 @@ class SacredSpiralVisualizer {
     this._drawGuides(ctx, cx, cy);
     ctx.drawImage(this._trail, 0, 0, w, h);
 
-    const tip = this._spiralPt(cx, cy, this._angle);
-    this._drawTip(ctx, tip.x, tip.y, moving);
+    const tip    = this._spiralPt(cx, cy, this._angle);
+    const dotPos = (!this.showRings && this._sparkTip) ? this._sparkTip : tip;
+    this._drawTip(ctx, dotPos.x, dotPos.y, moving);
   }
 
   // ── Trail appending ────────────────────────────────────────────────────────
 
+  // Map normalised intensity (0–1) to an HSLA string from the current palette.
+  _palColor(t, alpha) {
+    const p = SACRED_PALETTES[this.palette] || SACRED_PALETTES.aurora;
+    const h = p.h0 + t * (p.h1 - p.h0);
+    const l = p.l0 + t * (p.l1 - p.l0);
+    return `hsla(${h | 0},${p.s}%,${l | 0}%,${alpha.toFixed(2)})`;
+  }
+
   _appendPt(cx, cy, sm) {
     const pos     = this._spiralPt(cx, cy, this._angle);
     const spacing = this._ringSpacing();
-    const ringIdx = Math.floor(this._angle / (Math.PI * 2));
-    const hue     = (ringIdx * 30 + this._angle * 1.5) % 360;
+
+    // Normalise spark field against running peak (0–1)
+    const rawSp = Math.abs(sm[this.sparkField] ?? 0);
+    this._sparkPeak  = Math.max(this._sparkPeak * 0.999, rawSp, 0.001);
+    const normalised = rawSp / this._sparkPeak;
 
     if (this._lastPt) {
       // Hold _lastPt fixed on sub-pixel moves so distance accumulates
@@ -141,31 +174,39 @@ class SacredSpiralVisualizer {
 
       const tc = this._tc;
 
-      // Arc segment
-      tc.beginPath();
-      tc.moveTo(this._lastPt.x, this._lastPt.y);
-      tc.lineTo(pos.x, pos.y);
-      tc.strokeStyle = `hsla(${hue},62%,54%,0.80)`;
-      tc.lineWidth   = 1.1;
-      tc.lineJoin    = tc.lineCap = 'round';
-      tc.stroke();
-
-      // Spark: radial line scaled by sparkField, normalised to ring spacing
-      const radA  = this._angle - Math.PI / 2;
-      const rx    = Math.cos(radA), ry = Math.sin(radA);
-      const rawSp = Math.abs(sm[this.sparkField] ?? 0);
-      // Normalise against sensitivity × 50 so sparks scale intuitively
-      const spLen = Math.min(rawSp / Math.max(this.sensitivity * 50, 0.001) * spacing * 0.8, spacing * 1.1);
-
-      if (spLen > 0.6) {
-        const alpha = 0.3 + (spLen / (spacing * 1.1)) * 0.6;
+      // Arc segment — intensity drives colour and thickness
+      if (this.showRings) {
         tc.beginPath();
-        tc.moveTo(pos.x, pos.y);
-        tc.lineTo(pos.x + rx * spLen, pos.y + ry * spLen);
-        tc.strokeStyle = `hsla(${(hue + 55) % 360},92%,82%,${alpha.toFixed(2)})`;
-        tc.lineWidth   = 0.65;
-        tc.lineCap     = 'round';
+        tc.moveTo(this._lastPt.x, this._lastPt.y);
+        tc.lineTo(pos.x, pos.y);
+        tc.strokeStyle = this._palColor(normalised, 0.55 + normalised * 0.35);
+        tc.lineWidth   = 0.4 + normalised * 2.2;
+        tc.lineJoin    = tc.lineCap = 'round';
         tc.stroke();
+      }
+
+      // Spark — line or point, both intensity-driven
+      const spLen = normalised * spacing * 3 * this.sparkScale;
+      if (spLen > 0.4) {
+        const radA  = this._angle - Math.PI / 2;
+        const tipX  = pos.x + Math.cos(radA) * spLen;
+        const tipY  = pos.y + Math.sin(radA) * spLen;
+        this._sparkTip = { x: tipX, y: tipY };
+        const color = this._palColor(normalised, 0.3 + normalised * 0.65);
+        if (this.sparkStyle === 'points') {
+          tc.beginPath();
+          tc.arc(tipX, tipY, 0.4 + normalised * 2.2, 0, Math.PI * 2);
+          tc.fillStyle = color;
+          tc.fill();
+        } else {
+          tc.beginPath();
+          tc.moveTo(pos.x, pos.y);
+          tc.lineTo(tipX, tipY);
+          tc.strokeStyle = color;
+          tc.lineWidth   = 0.3 + normalised * 1.8;
+          tc.lineCap     = 'round';
+          tc.stroke();
+        }
       }
     }
 
@@ -175,15 +216,14 @@ class SacredSpiralVisualizer {
   // ── Pen-tip indicator ──────────────────────────────────────────────────────
 
   _drawTip(ctx, x, y, active) {
-    const hue = (this._angle * 18) % 360;
-    const r   = active ? 10 : 4;
-    const g   = ctx.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, `hsla(${hue},90%,88%,${active ? 0.9 : 0.3})`);
-    g.addColorStop(1, `hsla(${hue},80%,60%,0)`);
+    const r  = active ? 10 : 4;
+    const g  = ctx.createRadialGradient(x, y, 0, x, y, r);
+    g.addColorStop(0, this._palColor(1, active ? 0.9 : 0.3));
+    g.addColorStop(1, this._palColor(0.5, 0));
     ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fillStyle = g; ctx.fill();
     ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2);
-    ctx.fillStyle = active ? `hsl(${hue},95%,92%)` : '#555e6e';
+    ctx.fillStyle = active ? this._palColor(1, 1) : '#555e6e';
     ctx.fill();
   }
 

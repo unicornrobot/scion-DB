@@ -18,37 +18,66 @@
     html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); }
     canvas#viz { display: block; width: 100%; height: 100%; }
 
-    header {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 10;
-      display: flex; align-items: center; gap: 12px; padding: 8px 16px;
-      background: var(--panel); border-bottom: 1px solid var(--border);
+    /* Sidebar toggle — always on screen */
+    #sidebarToggle {
+      position: fixed; top: 12px; left: 12px; z-index: 30;
+      width: 34px; height: 34px;
+      background: rgba(14,16,20,.88); border: 1px solid var(--border);
+      color: var(--muted); border-radius: 8px; cursor: pointer;
+      font-size: 17px; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
       backdrop-filter: blur(8px);
-      font: 13px/1.4 -apple-system, "Segoe UI", system-ui, sans-serif;
+      transition: color .15s, border-color .15s;
+    }
+    #sidebarToggle:hover { color: var(--fg); border-color: var(--muted); }
+
+    /* Sidebar */
+    #sidebar {
+      position: fixed; left: 0; top: 0; bottom: 0; z-index: 20;
+      width: 240px;
+      background: rgba(14,16,20,.97);
+      border-right: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      display: flex; flex-direction: column;
+      transform: translateX(-100%);
+      transition: transform .22s cubic-bezier(.4,0,.2,1);
+      overflow-y: auto;
+      padding-top: 58px;
+      font: 12px/1.5 -apple-system,"Segoe UI",system-ui,sans-serif;
       color: var(--fg);
     }
-    header h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: .3px; }
+    #sidebar.open { transform: translateX(0); }
+
+    .sb-header { padding: 12px 16px 14px; border-bottom: 1px solid var(--border); }
+    .sb-title  { font-size: 14px; font-weight: 600; letter-spacing: .3px; margin-bottom: 6px; }
+    .sb-conn   { display: flex; align-items: center; gap: 7px; }
+    .sb-section { padding: 12px 16px; border-bottom: 1px solid var(--border); }
+    .sb-section:last-child { border-bottom: none; }
+    .sb-label  {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px;
+      color: var(--muted); font-weight: 700; margin-bottom: 8px;
+    }
+
     .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted);
       flex-shrink: 0; transition: background .4s; }
     .dot.live { background: var(--ok); }
     .conn-label { font-size: 12px; color: var(--muted); }
     .conn-label.live { color: var(--ok); }
 
-    .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px;
-      padding: 3px 8px; border-radius: 999px; background: rgba(30,36,46,.75);
-      color: var(--muted); border: 1px solid var(--border); }
-
-    select, .btn {
-      background: rgba(30,36,46,.75); border: 1px solid var(--border);
-      color: var(--muted); border-radius: 6px; padding: 4px 10px;
-      font-size: 13px; cursor: pointer; text-decoration: none;
-      display: inline-flex; align-items: center;
+    /* Live data readout overlay (bottom-right) */
+    #readoutWrap {
+      position: fixed; bottom: 14px; right: 16px; z-index: 10;
+      display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
     }
-    select:hover, .btn:hover { color: var(--fg); border-color: var(--muted); }
-    .spacer { flex: 1; }
-
-    /* Live data readout overlay (bottom-left) */
+    #readoutToggle {
+      background: rgba(14,16,20,.80); border: 1px solid var(--border);
+      color: var(--muted); border-radius: 6px; padding: 2px 8px;
+      font: 11px/1.6 -apple-system,"Segoe UI",system-ui,sans-serif;
+      cursor: pointer; backdrop-filter: blur(6px);
+      transition: color .15s, border-color .15s;
+    }
+    #readoutToggle:hover { color: var(--fg); border-color: var(--muted); }
     #dataReadout {
-      position: fixed; bottom: 14px; left: 16px; z-index: 10;
       display: grid; grid-template-columns: repeat(3, auto auto 52px);
       gap: 6px 14px; align-items: center;
       font: 11px/1.4 "SF Mono", "Fira Code", monospace;
@@ -60,21 +89,7 @@
     #dataReadout .val   { text-align: right; font-variant-numeric: tabular-nums; }
     #dataReadout .spark { width: 52px; height: 14px; display: block; }
 
-    /* ── Admin / threshold panel ─────────────────────────────────────────── */
-    #adminPanel {
-      position: fixed; top: 45px; right: 0; z-index: 20;
-      width: 230px;
-      background: rgba(18,22,30,.95);
-      border: 1px solid var(--border); border-right: none;
-      border-radius: 10px 0 0 10px;
-      padding: 16px;
-      font: 12px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif;
-      color: var(--fg);
-      backdrop-filter: blur(12px);
-      transform: translateX(100%);
-      transition: transform .22s cubic-bezier(.4,0,.2,1);
-    }
-    #adminPanel.open { transform: translateX(0); }
+    /* ── Sacred settings section (lives inside sidebar) ─────────────────── */
 
     .ap-title {
       font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px;
@@ -137,80 +152,126 @@
   </style>
 </head>
 <body>
-  <header>
-    <h1>Scion · Visualizer</h1>
-    <span class="dot" id="connDot"></span>
-    <span class="conn-label" id="connLabel">connecting…</span>
-    <select id="vizPicker">
-      <option value="organic">Organic Growth</option>
-      <option value="sacred">Sacred Geometry</option>
-    </select>
-    <span class="spacer"></span>
-    <button id="adminBtn" class="btn" style="display:none" title="Threshold settings">⚙ Threshold</button>
-    <a href="/" class="btn">← Chart</a>
-  </header>
+  <!-- Always-visible sidebar toggle -->
+  <button id="sidebarToggle" title="Toggle sidebar">☰</button>
 
-  <!-- Threshold admin panel (sacred geometry viz only) -->
-  <div id="adminPanel">
-    <div class="ap-title">Spiral Settings</div>
+  <!-- Sidebar -->
+  <nav id="sidebar">
 
-    <div class="ap-row">
-      <div class="ap-label"><span>Watch field</span></div>
-      <select class="ap-select" id="apField">
-        <option value="mean" selected>mean</option>
-        <option value="min">min</option>
-        <option value="max">max</option>
-        <option value="delta">delta</option>
-        <option value="variance">variance</option>
-        <option value="deviation">deviation</option>
+    <div class="sb-header">
+      <div class="sb-title">Scion · Visualizer</div>
+      <div class="sb-conn">
+        <span class="dot" id="connDot"></span>
+        <span class="conn-label" id="connLabel">connecting…</span>
+      </div>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-label">Visualizer</div>
+      <select id="vizPicker" class="ap-select">
+        <option value="organic">Organic Growth</option>
+        <option value="sacred" selected>Sacred Geometry</option>
       </select>
     </div>
 
-    <div class="ap-row">
-      <div class="ap-label">
-        <span>Sensitivity</span>
-        <code id="apValDisplay">0.02</code>
+    <!-- Sacred geometry settings — shown only when that viz is active -->
+    <div id="sacredSettings">
+      <div class="sb-section">
+        <div class="sb-label">Motion</div>
+        <div class="ap-row">
+          <div class="ap-label"><span>Watch field</span></div>
+          <select class="ap-select" id="apField">
+            <option value="mean" selected>mean</option>
+            <option value="min">min</option>
+            <option value="max">max</option>
+            <option value="delta">delta</option>
+            <option value="variance">variance</option>
+            <option value="deviation">deviation</option>
+          </select>
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Sensitivity</span>
+            <code id="apValDisplay">0.001</code>
+          </div>
+          <input type="range" class="ap-range" id="apRange" min="0.0001" max="0.05" step="0.0001" value="0.001">
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Change / frame</span>
+            <span class="ap-current" id="apCurrent">—</span>
+          </div>
+          <div class="ap-bar-wrap">
+            <div class="ap-bar-fill" id="apBarFill"></div>
+            <div class="ap-bar-thresh" id="apBarThresh"></div>
+          </div>
+        </div>
       </div>
-      <input type="range" class="ap-range" id="apRange" min="0.001" max="0.5" step="0.001" value="0.02">
-    </div>
 
-    <div class="ap-row">
-      <div class="ap-label">
-        <span>Change / frame</span>
-        <span class="ap-current" id="apCurrent">—</span>
+      <div class="sb-section">
+        <div class="sb-label">Appearance</div>
+        <div class="ap-row">
+          <div class="ap-label"><span>Palette</span></div>
+          <select class="ap-select" id="apPalette">
+            <option value="aurora"  selected>Aurora  — teal › violet</option>
+            <option value="fire"           >Fire    — red › gold</option>
+            <option value="ocean"          >Ocean   — cyan › indigo</option>
+            <option value="solar"          >Solar   — amber › lime</option>
+            <option value="void"           >Void    — indigo › rose</option>
+            <option value="prism"          >Prism   — full spectrum</option>
+          </select>
+        </div>
+        <div class="ap-row" style="display:flex;align-items:center;gap:8px">
+          <input type="checkbox" id="apShowRings" checked style="accent-color:var(--accent);width:14px;height:14px;cursor:pointer;flex-shrink:0">
+          <label for="apShowRings" style="font-size:11px;color:var(--muted);cursor:pointer">Show rings</label>
+        </div>
+        <div class="ap-row">
+          <div class="ap-label"><span>Spark style</span></div>
+          <select class="ap-select" id="apSparkStyle">
+            <option value="lines"  selected>Lines</option>
+            <option value="points"         >Points</option>
+          </select>
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Spark scale</span>
+            <code id="apSparkScaleDisplay">1.0</code>
+          </div>
+          <input type="range" class="ap-range" id="apSparkScale" min="0.1" max="20" step="0.1" value="1">
+        </div>
+        <div class="ap-row">
+          <div class="ap-label"><span>Spark field</span></div>
+          <select class="ap-select" id="apSpark">
+            <option value="deviation" selected>deviation</option>
+            <option value="variance">variance</option>
+            <option value="delta">delta</option>
+            <option value="mean">mean</option>
+          </select>
+        </div>
+        <div class="ap-row">
+          <button class="ap-btn" id="apReset">Clear trail &amp; reset</button>
+        </div>
       </div>
-      <div class="ap-bar-wrap">
-        <div class="ap-bar-fill" id="apBarFill"></div>
-        <div class="ap-bar-thresh" id="apBarThresh"></div>
-      </div>
     </div>
 
-    <hr class="ap-divider">
-
-    <div class="ap-row">
-      <div class="ap-label"><span>Spark field</span></div>
-      <select class="ap-select" id="apSpark">
-        <option value="deviation" selected>deviation</option>
-        <option value="variance">variance</option>
-        <option value="delta">delta</option>
-        <option value="mean">mean</option>
-      </select>
+    <div class="sb-section">
+      <a href="/" class="ap-btn" style="text-align:center;text-decoration:none;display:block">← Back to Chart</a>
     </div>
 
-    <div class="ap-row">
-      <button class="ap-btn" id="apReset">Clear trail &amp; reset</button>
-    </div>
-  </div>
+  </nav>
 
   <canvas id="viz"></canvas>
 
-  <div id="dataReadout">
-    <span class="field">min</span>   <span class="val" id="dr-min">—</span>       <canvas class="spark" id="sp-min"></canvas>
-    <span class="field">max</span>   <span class="val" id="dr-max">—</span>       <canvas class="spark" id="sp-max"></canvas>
-    <span class="field">mean</span>  <span class="val" id="dr-mean">—</span>      <canvas class="spark" id="sp-mean"></canvas>
-    <span class="field">delta</span> <span class="val" id="dr-delta">—</span>     <canvas class="spark" id="sp-delta"></canvas>
-    <span class="field">var</span>   <span class="val" id="dr-variance">—</span>  <canvas class="spark" id="sp-variance"></canvas>
-    <span class="field">dev</span>   <span class="val" id="dr-deviation">—</span> <canvas class="spark" id="sp-deviation"></canvas>
+  <div id="readoutWrap">
+    <button id="readoutToggle">data ▾</button>
+    <div id="dataReadout">
+      <span class="field">min</span>   <span class="val" id="dr-min">—</span>       <canvas class="spark" id="sp-min"></canvas>
+      <span class="field">max</span>   <span class="val" id="dr-max">—</span>       <canvas class="spark" id="sp-max"></canvas>
+      <span class="field">mean</span>  <span class="val" id="dr-mean">—</span>      <canvas class="spark" id="sp-mean"></canvas>
+      <span class="field">delta</span> <span class="val" id="dr-delta">—</span>     <canvas class="spark" id="sp-delta"></canvas>
+      <span class="field">var</span>   <span class="val" id="dr-variance">—</span>  <canvas class="spark" id="sp-variance"></canvas>
+      <span class="field">dev</span>   <span class="val" id="dr-deviation">—</span> <canvas class="spark" id="sp-deviation"></canvas>
+    </div>
   </div>
 
   <script src="/js/viz-engine.js"></script>
@@ -224,46 +285,111 @@
 
     engine.register('organic', new OrganicGrowthVisualizer());
     engine.register('sacred',  sacredViz);
-    engine.activate('organic');
+    engine.activate('sacred');
 
-    const adminBtn   = document.getElementById('adminBtn');
-    const adminPanel = document.getElementById('adminPanel');
+    const sidebar        = document.getElementById('sidebar');
+    const sacredSettings = document.getElementById('sacredSettings');
+
+    document.getElementById('sidebarToggle').addEventListener('click', () => {
+      sidebar.classList.toggle('open');
+    });
 
     function setViz(name) {
       engine.activate(name);
-      const isSacred = name === 'sacred';
-      adminBtn.style.display = isSacred ? '' : 'none';
-      if (!isSacred) adminPanel.classList.remove('open');
+      sacredSettings.style.display = name === 'sacred' ? '' : 'none';
     }
 
     document.getElementById('vizPicker').addEventListener('change', (e) => {
       setViz(e.target.value);
     });
 
-    adminBtn.addEventListener('click', () => adminPanel.classList.toggle('open'));
-
     // ── Admin panel wiring ────────────────────────────────────────────────
-    const apField      = document.getElementById('apField');
-    const apRange      = document.getElementById('apRange');
-    const apValDisplay = document.getElementById('apValDisplay');
-    const apCurrent    = document.getElementById('apCurrent');
-    const apBarFill    = document.getElementById('apBarFill');
-    const apBarThresh  = document.getElementById('apBarThresh');
-    const apSpark      = document.getElementById('apSpark');
-    const apReset      = document.getElementById('apReset');
+    const apField             = document.getElementById('apField');
+    const apRange             = document.getElementById('apRange');
+    const apValDisplay        = document.getElementById('apValDisplay');
+    const apCurrent           = document.getElementById('apCurrent');
+    const apBarFill           = document.getElementById('apBarFill');
+    const apBarThresh         = document.getElementById('apBarThresh');
+    const apPalette           = document.getElementById('apPalette');
+    const apSparkStyle        = document.getElementById('apSparkStyle');
+    const apShowRings         = document.getElementById('apShowRings');
+    const apSpark             = document.getElementById('apSpark');
+    const apSparkScale        = document.getElementById('apSparkScale');
+    const apSparkScaleDisplay = document.getElementById('apSparkScaleDisplay');
+    const apReset             = document.getElementById('apReset');
+
+    const SACRED_LS_KEY = 'scion-sacred-settings';
+
+    function saveSacredSettings() {
+      try {
+        localStorage.setItem(SACRED_LS_KEY, JSON.stringify({
+          watchField:  sacredViz.watchField,
+          sensitivity: sacredViz.sensitivity,
+          sparkField:  sacredViz.sparkField,
+          sparkScale:  sacredViz.sparkScale,
+          palette:     sacredViz.palette,
+          sparkStyle:  sacredViz.sparkStyle,
+          showRings:   sacredViz.showRings,
+        }));
+      } catch (_) {}
+    }
+
+    function loadSacredSettings() {
+      let saved = {};
+      try { saved = JSON.parse(localStorage.getItem(SACRED_LS_KEY)) || {}; } catch (_) {}
+
+      if (saved.watchField  != null) { apField.value      = saved.watchField;  sacredViz.watchField  = saved.watchField;  }
+      if (saved.sensitivity != null) { apRange.value      = saved.sensitivity; sacredViz.sensitivity = saved.sensitivity; }
+      if (saved.sparkField  != null) { apSpark.value      = saved.sparkField;  sacredViz.sparkField  = saved.sparkField;  }
+      if (saved.sparkScale  != null) { apSparkScale.value = saved.sparkScale;  sacredViz.sparkScale  = saved.sparkScale;  }
+      if (saved.palette     != null) { apPalette.value     = saved.palette;     sacredViz.palette     = saved.palette;     }
+      if (saved.sparkStyle  != null) { apSparkStyle.value  = saved.sparkStyle;  sacredViz.sparkStyle  = saved.sparkStyle;  }
+      if (saved.showRings   != null) { apShowRings.checked = saved.showRings;   sacredViz.showRings   = saved.showRings;   }
+
+      // Sync display labels to whatever values ended up applied
+      apValDisplay.textContent        = sacredViz.sensitivity.toFixed(4);
+      apSparkScaleDisplay.textContent = sacredViz.sparkScale.toFixed(1);
+    }
+
+    loadSacredSettings();
 
     apField.addEventListener('change', () => {
       sacredViz.watchField = apField.value;
+      saveSacredSettings();
     });
 
     apRange.addEventListener('input', () => {
       const v = parseFloat(apRange.value);
-      apValDisplay.textContent = v.toFixed(3);
+      apValDisplay.textContent = v.toFixed(4);
       sacredViz.sensitivity = v;
+      saveSacredSettings();
+    });
+
+    apPalette.addEventListener('change', () => {
+      sacredViz.palette = apPalette.value;
+      saveSacredSettings();
+    });
+
+    apSparkStyle.addEventListener('change', () => {
+      sacredViz.sparkStyle = apSparkStyle.value;
+      saveSacredSettings();
+    });
+
+    apShowRings.addEventListener('change', () => {
+      sacredViz.showRings = apShowRings.checked;
+      saveSacredSettings();
+    });
+
+    apSparkScale.addEventListener('input', () => {
+      const v = parseFloat(apSparkScale.value);
+      apSparkScaleDisplay.textContent = v.toFixed(1);
+      sacredViz.sparkScale = v;
+      saveSacredSettings();
     });
 
     apSpark.addEventListener('change', () => {
       sacredViz.sparkField = apSpark.value;
+      saveSacredSettings();
     });
 
     apReset.addEventListener('click', () => sacredViz.clearTrail());
@@ -278,6 +404,7 @@
       const fillPct  = Math.min(change / barMax * 100, 100);
       const sensPct  = Math.min(sens   / barMax * 100, 100);
 
+      if (apPalette.value !== sacredViz.palette) apPalette.value = sacredViz.palette;
       apCurrent.textContent = change.toFixed(4);
       apCurrent.classList.toggle('over', over);
       apBarFill.style.width  = fillPct + '%';
@@ -290,6 +417,23 @@
       document.getElementById('connLabel').classList.toggle('live', live);
       document.getElementById('connLabel').textContent = live ? 'live' : 'reconnecting…';
     };
+
+    // ── Data readout toggle ───────────────────────────────────────────────
+    const readoutToggle = document.getElementById('readoutToggle');
+    const dataReadout   = document.getElementById('dataReadout');
+    let readoutVisible  = localStorage.getItem('scion-readout-visible') !== 'false';
+
+    function applyReadoutVisibility() {
+      dataReadout.style.display   = readoutVisible ? '' : 'none';
+      readoutToggle.textContent   = readoutVisible ? 'data ▾' : 'data ▸';
+    }
+    applyReadoutVisibility();
+
+    readoutToggle.addEventListener('click', () => {
+      readoutVisible = !readoutVisible;
+      localStorage.setItem('scion-readout-visible', readoutVisible);
+      applyReadoutVisibility();
+    });
 
     // ── Data readout (ticks ~4×/s, reads from engine.state.smooth) ────────
     function fmt(v) {
