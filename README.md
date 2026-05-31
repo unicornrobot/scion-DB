@@ -78,3 +78,21 @@ Or, if 11045 is free, just run `npm run synth` with defaults.
 | POST   | `/api/record/stop`  | —                          | Flushes pending writes          |
 
 WebSocket at `/ws` pushes `{ type:"sample", field, value, ts }` per OSC message.
+
+
+
+# --- OSC source (Pocket Scion) -----------------------------------------------
+# UDP port to listen on for incoming OSC messages from the Pocket Scion device.
+OSC_HOST=127.0.0.1
+OSC_PORT=11046
+
+# --- HTTP / WebSocket server -------------------------------------------------
+HTTP_PORT=3001
+
+# --- InfluxDB v2 -------------------------------------------------------------
+# NOTE: InfluxDB on this machine is on 8086
+INFLUX_URL=http://127.0.0.1:8086
+INFLUX_TOKEN=SQIb4KDpxyERVrq9KHb_EX9-vhppempGr_0Vu5Ul-nrRoY6oCPzTOjyChMpgka72R9zpEDE0v4ILtch3JguGiQ==
+INFLUX_ORG=home
+INFLUX_BUCKET=plants
+INFLUX_MEASUREMENT=scion_stats
