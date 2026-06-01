@@ -181,20 +181,20 @@
         <div class="ap-row">
           <div class="ap-label"><span>Watch field</span></div>
           <select class="ap-select" id="apField">
-            <option value="mean" selected>mean</option>
+            <option value="mean">mean</option>
             <option value="min">min</option>
             <option value="max">max</option>
             <option value="delta">delta</option>
-            <option value="variance">variance</option>
+            <option value="variance" selected>variance</option>
             <option value="deviation">deviation</option>
           </select>
         </div>
         <div class="ap-row">
           <div class="ap-label">
             <span>Sensitivity</span>
-            <code id="apValDisplay">0.001</code>
+            <code id="apValDisplay">0.0043</code>
           </div>
-          <input type="range" class="ap-range" id="apRange" min="0.0001" max="0.05" step="0.0001" value="0.001">
+          <input type="range" class="ap-range" id="apRange" min="0.0001" max="0.05" step="0.0001" value="0.0043">
         </div>
         <div class="ap-row">
           <div class="ap-label">
@@ -213,23 +213,23 @@
         <div class="ap-row">
           <div class="ap-label"><span>Palette</span></div>
           <select class="ap-select" id="apPalette">
-            <option value="aurora"  selected>Aurora  — teal › violet</option>
+            <option value="aurora"          >Aurora  — teal › violet</option>
             <option value="fire"           >Fire    — red › gold</option>
             <option value="ocean"          >Ocean   — cyan › indigo</option>
             <option value="solar"          >Solar   — amber › lime</option>
             <option value="void"           >Void    — indigo › rose</option>
-            <option value="prism"          >Prism   — full spectrum</option>
+            <option value="prism"  selected  >Prism   — full spectrum</option>
           </select>
         </div>
         <div class="ap-row" style="display:flex;align-items:center;gap:8px">
-          <input type="checkbox" id="apShowRings" checked style="accent-color:var(--accent);width:14px;height:14px;cursor:pointer;flex-shrink:0">
+          <input type="checkbox" id="apShowRings" style="accent-color:var(--accent);width:14px;height:14px;cursor:pointer;flex-shrink:0">
           <label for="apShowRings" style="font-size:11px;color:var(--muted);cursor:pointer">Show rings</label>
         </div>
         <div class="ap-row">
           <div class="ap-label"><span>Spark style</span></div>
           <select class="ap-select" id="apSparkStyle">
-            <option value="lines"  selected>Lines</option>
-            <option value="points"         >Points</option>
+            <option value="lines"          >Lines</option>
+            <option value="points" selected>Points</option>
           </select>
         </div>
         <div class="ap-row">

@@ -21,13 +21,13 @@ const SACRED_PALETTES = {
 };
 class SacredSpiralVisualizer {
   constructor() {
-    this.watchField  = 'mean';
-    this.sensitivity = 0.001;
+    this.watchField  = 'variance';
+    this.sensitivity = 0.0043;
     this.sparkField  = 'deviation';
     this.sparkScale  = 1.0;
-    this.palette     = 'aurora';
-    this.sparkStyle  = 'lines';  // 'lines' | 'points'
-    this.showRings   = true;
+    this.palette     = 'prism';
+    this.sparkStyle  = 'points';
+    this.showRings   = false;
 
     this._angle      = 0;
     this._trail      = null;
@@ -140,7 +140,7 @@ class SacredSpiralVisualizer {
     ctx.fillStyle = '#0e1014';
     ctx.fillRect(0, 0, w, h);
 
-    this._drawGuides(ctx, cx, cy);
+    this._drawSpiralGuide(ctx, cx, cy);
     ctx.drawImage(this._trail, 0, 0, w, h);
 
     const tip    = this._spiralPt(cx, cy, this._angle);
@@ -227,64 +227,38 @@ class SacredSpiralVisualizer {
     ctx.fill();
   }
 
-  // ── Sacred geometry scaffold ───────────────────────────────────────────────
+  // ── Spiral path guide ─────────────────────────────────────────────────────
+  // Draws the complete Archimedean spiral track from centre to edge as a faint
+  // ghost line, so the full path the dot follows is always visible.
 
-  _drawGuides(ctx, cx, cy) {
-    const R = Math.min(this._w, this._h) * 0.44;
-    const r = R / 3;
+  _drawSpiralGuide(ctx, cx, cy) {
+    const spacing     = this._ringSpacing();
+    const maxSparkLen = spacing * 3 * this.sparkScale;
+    const maxR        = Math.min(this._w, this._h) * 0.5 - maxSparkLen;
+    const maxAngle    = Math.max(0, (maxR - 10) * (Math.PI * 2) / spacing);
+
+    // ~40 points per full revolution keeps the curve visually smooth
+    const steps = Math.ceil(maxAngle * 40 / (Math.PI * 2));
 
     ctx.save();
     ctx.strokeStyle = '#4cc9f0';
     ctx.lineWidth   = 0.5;
-
-    ctx.globalAlpha = 0.07;
-    this._circle(ctx, cx, cy, r);
-    for (let i = 0; i < 6; i++) {
-      const a = (i / 6) * Math.PI * 2 - Math.PI / 6;
-      this._circle(ctx, cx + r * Math.cos(a), cy + r * Math.sin(a), r);
-    }
-
-    ctx.globalAlpha = 0.04;
-    this._ngon(ctx, cx, cy, r,                6, -Math.PI / 6);
-    this._ngon(ctx, cx, cy, r * Math.sqrt(3), 6,  0);
-    this._ngon(ctx, cx, cy, R * 0.55,         3, -Math.PI / 2);
-    this._ngon(ctx, cx, cy, R * 0.55,         3,  Math.PI / 2);
-
-    ctx.globalAlpha = 0.03;
-    this._circle(ctx, cx, cy, R);
-    this._circle(ctx, cx, cy, R * 0.618);
-    this._circle(ctx, cx, cy, R * 0.382);
-
-    ctx.globalAlpha = 0.025;
-    const pts = Array.from({ length: 6 }, (_, i) => {
-      const a = (i / 6) * Math.PI * 2 - Math.PI / 6;
-      return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
-    });
-    for (let i = 0; i < 6; i++) {
-      for (let j = i + 1; j < 6; j++) {
-        ctx.beginPath();
-        ctx.moveTo(pts[i][0], pts[i][1]);
-        ctx.lineTo(pts[j][0], pts[j][1]);
-        ctx.stroke();
-      }
-    }
-
-    ctx.restore();
-  }
-
-  _circle(ctx, x, y, r) {
-    ctx.beginPath(); ctx.arc(x, y, Math.max(r, 0.5), 0, Math.PI * 2); ctx.stroke();
-  }
-
-  _ngon(ctx, x, y, r, n, rot = 0) {
+    ctx.globalAlpha = 0.10;
+    ctx.setLineDash([2, 3]);
     ctx.beginPath();
-    for (let i = 0; i <= n; i++) {
-      const a = rot + (i / n) * Math.PI * 2;
-      i === 0
-        ? ctx.moveTo(x + r * Math.cos(a), y + r * Math.sin(a))
-        : ctx.lineTo(x + r * Math.cos(a), y + r * Math.sin(a));
+
+    for (let i = 0; i <= steps; i++) {
+      const angle = (i / steps) * maxAngle;
+      const r     = 10 + (spacing * angle) / (Math.PI * 2);
+      const a     = angle - Math.PI / 2;
+      const x     = cx + r * Math.cos(a);
+      const y     = cy + r * Math.sin(a);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     }
+
     ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
   }
 }
 
