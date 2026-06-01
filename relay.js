@@ -94,6 +94,13 @@ wss.on('connection', (ws, req) => {
   }
 });
 
+// ── Keepalive pings (prevents Railway's proxy from dropping idle connections) ─
+setInterval(() => {
+  for (const v of viewers) {
+    if (v.readyState === WebSocket.OPEN) v.ping();
+  }
+}, 20000);
+
 // ── Start ────────────────────────────────────────────────────────────────────
 server.listen(PORT, () => {
   console.log(`[relay] listening on port ${PORT}`);
