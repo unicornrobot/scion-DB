@@ -302,11 +302,38 @@ wss.on('connection', (ws) => {
   ws.send(JSON.stringify({ type: 'hello', latest, recording }));
 });
 
+// ---------------------------------------------------------------------------
+// Cloud relay publisher (optional).
+// Set RELAY_URL + PUB_SECRET in .env to forward every sample to the relay.
+// ---------------------------------------------------------------------------
+const RELAY_URL    = process.env.RELAY_URL    || '';
+const PUB_SECRET   = process.env.PUB_SECRET   || '';
+let   relayWs      = null;
+let   relayRetryTimer = null;
+
+function connectRelay() {
+  if (!RELAY_URL || !PUB_SECRET) return;
+  const { WebSocket: WS } = require('ws');
+  const url = `${RELAY_URL}?pub=${encodeURIComponent(PUB_SECRET)}`;
+  const ws  = new WS(url);
+
+  ws.on('open',  () => { relayWs = ws; console.log('[relay] connected to', RELAY_URL); });
+  ws.on('close', () => {
+    relayWs = null;
+    console.log('[relay] disconnected — retrying in 5 s');
+    relayRetryTimer = setTimeout(connectRelay, 5000);
+  });
+  ws.on('error', () => ws.terminate());
+}
+
+connectRelay();
+
 function broadcast(payload) {
   const msg = JSON.stringify(payload);
   for (const client of wss.clients) {
     if (client.readyState === 1) client.send(msg);
   }
+  if (relayWs && relayWs.readyState === 1) relayWs.send(msg);
 }
 
 // ---------------------------------------------------------------------------
