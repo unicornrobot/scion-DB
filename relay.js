@@ -57,6 +57,12 @@ wss.on('connection', (ws, req) => {
 
   if (isPub) {
     // ── Publisher (local server.js) ────────────────────────────────────────
+    // If a stale publisher socket is still open, kill it before registering
+    // the new one — prevents its delayed close from wiping the fresh state.
+    if (publisherWs && publisherWs !== ws) {
+      console.log('[relay] replacing stale publisher');
+      publisherWs.terminate();
+    }
     publisherConnected = true;
     publisherWs        = ws;
     console.log('[relay] publisher connected');
@@ -74,8 +80,12 @@ wss.on('connection', (ws, req) => {
     });
 
     ws.on('close', () => {
-      publisherConnected = false;
-      publisherWs        = null;
+      // Only clear state if this is still the active publisher socket.
+      // A stale socket closing after a reconnect must not overwrite the new one.
+      if (publisherWs === ws) {
+        publisherConnected = false;
+        publisherWs        = null;
+      }
       console.log('[relay] publisher disconnected');
     });
 
