@@ -42,28 +42,31 @@ app.get('/relay-status', (_req, res) => {
 const server = http.createServer(app);
 
 // ── WebSocket hub ────────────────────────────────────────────────────────────
-const wss     = new WebSocketServer({ server, path: '/ws' });
-const viewers = new Set();
-const latest  = {};           // cached latest per field → sent as hello to new viewers
+const wss        = new WebSocketServer({ server, path: '/ws' });
+const viewers    = new Set();
+const latest     = {};
 let   publisherConnected = false;
+let   publisherWs        = null;
 
 wss.on('connection', (ws, req) => {
-  const url    = new URL(req.url, 'http://x');
-  const isPub  = PUB_SECRET && url.searchParams.get('pub') === PUB_SECRET;
+  const url   = new URL(req.url, 'http://x');
+  const isPub = PUB_SECRET && url.searchParams.get('pub') === PUB_SECRET;
+
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
 
   if (isPub) {
     // ── Publisher (local server.js) ────────────────────────────────────────
     publisherConnected = true;
+    publisherWs        = ws;
     console.log('[relay] publisher connected');
 
     ws.on('message', (data) => {
-      // Cache latest field values for viewers who connect mid-session
       try {
         const msg = JSON.parse(data);
         if (msg.type === 'sample') latest[msg.field] = msg.value;
       } catch (_) {}
 
-      // Fan out to every open viewer
       const str = data.toString();
       for (const v of viewers) {
         if (v.readyState === WebSocket.OPEN) v.send(str);
@@ -72,6 +75,7 @@ wss.on('connection', (ws, req) => {
 
     ws.on('close', () => {
       publisherConnected = false;
+      publisherWs        = null;
       console.log('[relay] publisher disconnected');
     });
 
@@ -82,7 +86,6 @@ wss.on('connection', (ws, req) => {
     viewers.add(ws);
     console.log(`[relay] viewer connected (${viewers.size} total)`);
 
-    // Seed the client with whatever values we already know
     ws.send(JSON.stringify({ type: 'hello', latest }));
 
     ws.on('close', () => {
@@ -94,10 +97,26 @@ wss.on('connection', (ws, req) => {
   }
 });
 
-// ── Keepalive pings (prevents Railway's proxy from dropping idle connections) ─
+// ── Heartbeat — ping every socket every 20 s; terminate any that don't pong ──
+// This forces a clean close+reconnect rather than leaving a silent dead socket.
 setInterval(() => {
+  // Publisher
+  if (publisherWs) {
+    if (!publisherWs.isAlive) {
+      console.log('[relay] publisher heartbeat timeout — terminating');
+      publisherConnected = false;
+      publisherWs.terminate();
+      publisherWs = null;
+    } else {
+      publisherWs.isAlive = false;
+      publisherWs.ping();
+    }
+  }
+  // Viewers
   for (const v of viewers) {
-    if (v.readyState === WebSocket.OPEN) v.ping();
+    if (!v.isAlive) { v.terminate(); viewers.delete(v); continue; }
+    v.isAlive = false;
+    v.ping();
   }
 }, 20000);
 

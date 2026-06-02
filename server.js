@@ -317,7 +317,19 @@ function connectRelay() {
   const url = `${RELAY_URL}?pub=${encodeURIComponent(PUB_SECRET)}`;
   const ws  = new WS(url);
 
-  ws.on('open',  () => { relayWs = ws; console.log('[relay] connected to', RELAY_URL); });
+  ws.on('open', () => {
+    relayWs = ws;
+    console.log('[relay] connected to', RELAY_URL);
+
+    // Ping the relay every 20 s so Railway's proxy never sees an idle connection
+    const hb = setInterval(() => {
+      if (ws.readyState === ws.OPEN) ws.ping();
+      else clearInterval(hb);
+    }, 20000);
+
+    ws.on('close', () => clearInterval(hb));
+  });
+
   ws.on('close', () => {
     relayWs = null;
     console.log('[relay] disconnected — retrying in 5 s');
