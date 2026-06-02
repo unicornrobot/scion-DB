@@ -1,8 +1,9 @@
 # Scion DB
 
 Live OSC data recorder, visualiser, and cloud relay for the **Pocket Scion** device.
+The Pocket SCÍON is a portable, battery-powered biofeedback instrument developed by Instruō in collaboration with ecologist and musician Tarun Nayar (Modern Biology).  It captures electrical signals from living organisms, such as plants, fungi, or human skin, and translates them into evolving soundscapes and musical notes.
 
-The Pocket Scion streams real-time statistical analysis of an audio signal as OSC UDP messages — six fields (`/min`, `/max`, `/mean`, `/delta`, `/variance`, `/deviation`) at up to 30 Hz. This application receives those messages, displays them as a live chart and generative geometry visualiser, records sessions to InfluxDB, and optionally relays the live data stream to any browser on the internet.
+The Pocket Scion streams real-time statistical analysis of the signal as OSC UDP messages — six fields (`/min`, `/max`, `/mean`, `/delta`, `/variance`, `/deviation`) at up to 30 Hz. This application receives those messages, displays them as a live chart and generative geometry visualiser, records sessions to InfluxDB, and optionally relays the live data stream to any browser on the internet.
 
 **[► View live](https://web-production-cb3c4.up.railway.app/viz)**
 
