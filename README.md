@@ -4,6 +4,23 @@ Live OSC data recorder, visualiser, and cloud relay for the **Pocket Scion** dev
 
 The Pocket Scion streams real-time statistical analysis of an audio signal as OSC UDP messages — six fields (`/min`, `/max`, `/mean`, `/delta`, `/variance`, `/deviation`) at up to 30 Hz. This application receives those messages, displays them as a live chart and generative geometry visualiser, records sessions to InfluxDB, and optionally relays the live data stream to any browser on the internet.
 
+**[► View live](https://web-production-cb3c4.up.railway.app/viz)**
+
+---
+
+## Screenshots
+
+<table>
+  <tr>
+    <td><img src="screenshots/Screenshot%202026-05-31%20182854.png" alt="Aurora palette — rings and lines mode" width="360"/></td>
+    <td><img src="screenshots/Screenshot%202026-06-01%20090928.png" alt="Solar palette — points mode with prominent spikes" width="360"/></td>
+  </tr>
+  <tr>
+    <td><img src="screenshots/Screenshot%202026-06-02%20181533.png" alt="Prism palette — lines mode, multiple layered rings" width="360"/></td>
+    <td><img src="screenshots/Screenshot%202026-06-02%20190508.png" alt="Solar palette — points only, rings hidden" width="360"/></td>
+  </tr>
+</table>
+
 ---
 
 ## Architecture
