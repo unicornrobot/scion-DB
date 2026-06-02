@@ -30,13 +30,21 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/viz', (_req, res) =>
   res.sendFile(path.join(__dirname, 'public', 'viz.html')));
 
-// Simple status endpoint so you can check the relay is up
 app.get('/relay-status', (_req, res) => {
   res.json({
     publisherConnected,
     viewers: viewers.size,
-    latestFields: Object.keys(latest),
+    latest,
   });
+});
+
+// Wipe the cached latest values (e.g. after a bad data burst)
+app.post('/relay-reset', (req, res) => {
+  const secret = req.headers['x-pub-secret'] || '';
+  if (secret !== PUB_SECRET) return res.status(401).json({ error: 'unauthorized' });
+  for (const k of Object.keys(latest)) delete latest[k];
+  console.log('[relay] latest cache cleared');
+  res.json({ ok: true });
 });
 
 const server = http.createServer(app);
@@ -70,7 +78,9 @@ wss.on('connection', (ws, req) => {
     ws.on('message', (data) => {
       try {
         const msg = JSON.parse(data);
-        if (msg.type === 'sample') latest[msg.field] = msg.value;
+        if (msg.type === 'sample' && Number.isFinite(msg.value)) {
+          latest[msg.field] = msg.value;
+        }
       } catch (_) {}
 
       const str = data.toString();
