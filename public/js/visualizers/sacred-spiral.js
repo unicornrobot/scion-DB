@@ -1,5 +1,5 @@
 /**
- * Sacred Geometry — Change-Driven Spiral Visualizer
+ * Spiral Visualizer
  *
  * Public config (read/written by the admin panel):
  *   watchField   — which smoothed field to monitor for change  (default: 'mean')

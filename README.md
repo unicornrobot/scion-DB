@@ -1,98 +1,321 @@
-# scion-DB
+# Scion DB
 
-Live graphing + InfluxDB recorder for OSC stats from a Pocket Scion device.
+Live OSC data recorder, visualiser, and cloud relay for the **Pocket Scion** device.
 
-The Pocket Scion sends OSC messages to `udp://127.0.0.1:11045` with addresses
-`/min`, `/max`, `/mean`, `/delta`, `/variance`, `/deviation`. This app listens
-for those messages, broadcasts them over WebSocket to a browser chart, and
-optionally writes them to a local InfluxDB v2 bucket on Record / Stop.
+The Pocket Scion streams real-time statistical analysis of an audio signal as OSC UDP messages — six fields (`/min`, `/max`, `/mean`, `/delta`, `/variance`, `/deviation`) at up to 30 Hz. This application receives those messages, displays them as a live chart and generative geometry visualiser, records sessions to InfluxDB, and optionally relays the live data stream to any browser on the internet.
 
-## Setup
+---
+
+## Architecture
+
+```
+Pocket Scion (UDP/OSC)
+        │
+        ▼
+  server.js  ──── WebSocket /ws ────▶  Local browsers
+  (local)                               localhost:3000
+        │
+        │  WebSocket (publisher)
+        ▼
+  relay.js  ─────────────────────────▶  Remote browsers worldwide
+  (Railway)      WebSocket /ws           your-relay.up.railway.app/viz
+```
+
+---
+
+## Features
+
+- **Live chart** — rolling time-series of all six fields with toggleable series, spike filtering, and configurable time window
+- **Spiral visualiser** — change-driven Archimedean spiral; progresses only when the signal is actively varying, with radial spark lines scaled to data amplitude
+- **Organic Growth visualiser** — particle/growth canvas visualiser (hidden from picker by default)
+- **Session recording** — writes to InfluxDB v2 with per-session tagging; playback in the chart view
+- **Cloud relay** — thin WebSocket fan-out server; deploy once to Railway, share a URL with anyone
+
+---
+
+## Prerequisites
+
+| Requirement | Version | Notes |
+|---|---|---|
+| Node.js | 18 or newer | |
+| npm | 9 or newer | bundled with Node |
+| InfluxDB v2 | 2.x | optional — only needed for recording |
+| A Railway account | — | optional — only needed for cloud relay |
+
+---
+
+## Local setup (Linux)
+
+### 1. Install Node.js
 
 ```bash
+# Using NodeSource (recommended)
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Verify
+node -v   # should print v20.x.x or newer
+npm -v
+```
+
+### 2. Clone and install dependencies
+
+```bash
+git clone https://github.com/YOUR_USERNAME/scion-DB.git
+cd scion-DB
 npm install
-cp .env.example .env       # then fill in INFLUX_TOKEN / INFLUX_ORG
+```
+
+### 3. Configure environment
+
+```bash
+cp .env.example .env
+nano .env          # or use any editor
+```
+
+At minimum set `OSC_PORT` to match what your Pocket Scion device is sending to. All other values have sensible defaults. Leave `RELAY_URL` and `PUB_SECRET` blank until you set up the cloud relay.
+
+### 4. Start
+
+```bash
 npm start
 ```
 
-Open <http://127.0.0.1:3000>.
+Open **http://localhost:3000** for the live chart, or **http://localhost:3000/viz** for the geometry visualiser.
 
-## Ports on this machine
+---
 
-When this project was scaffolded the local ports were:
+## Environment variables
 
-| Port  | Service                                 |
-|-------|-----------------------------------------|
-| 8086  | InfluxDB v2.9.1 (this is the one we use) |
-| 11045 | UDP — OSC port specified by the brief    |
+| Variable | Default | Description |
+|---|---|---|
+| `OSC_HOST` | `0.0.0.0` | UDP bind address for incoming OSC |
+| `OSC_PORT` | `11046` | UDP port the Pocket Scion sends to |
+| `HTTP_PORT` | `3000` | HTTP / WebSocket server port |
+| `INFLUX_URL` | `http://127.0.0.1:8086` | InfluxDB v2 base URL |
+| `INFLUX_TOKEN` | — | InfluxDB API token (required to record) |
+| `INFLUX_ORG` | — | InfluxDB organisation name |
+| `INFLUX_BUCKET` | `scion` | Bucket to write into |
+| `INFLUX_MEASUREMENT` | `scion_stats` | Measurement name |
+| `RELAY_URL` | — | `wss://` URL of your deployed relay (optional) |
+| `PUB_SECRET` | — | Shared secret authenticating the publisher to the relay |
 
-If `OSC_PORT` is already bound by another process you'll see `EADDRINUSE` at
-startup — either stop the other listener, or set `OSC_PORT` in `.env` and tell
-Pocket Scion to send to the new port.
+---
 
-## InfluxDB
+## InfluxDB setup (optional)
 
-Uses InfluxDB v2's client library. Required env vars before recording works:
+Recording sessions to InfluxDB is optional. The live chart and visualiser work without it.
 
-- `INFLUX_URL` (default `http://127.0.0.1:8086`)
-- `INFLUX_TOKEN`
-- `INFLUX_ORG`
-- `INFLUX_BUCKET` (default `scion`)
+### Install InfluxDB v2 on Linux
+
+```bash
+# Download and install
+wget https://dl.influxdata.com/influxdb/releases/influxdb2-2.7.6_linux_amd64.tar.gz
+tar xvzf influxdb2-2.7.6_linux_amd64.tar.gz
+sudo cp influxdb2-2.7.6/usr/bin/influx* /usr/local/bin/
+
+# Or via apt
+curl https://repos.influxdata.com/influxdb.key | sudo apt-key add -
+echo "deb https://repos.influxdata.com/ubuntu focal stable" | sudo tee /etc/apt/sources.list.d/influxdb.list
+sudo apt-get update && sudo apt-get install influxdb2
+sudo systemctl start influxdb
+```
+
+### Initial InfluxDB configuration
+
+Navigate to **http://localhost:8086** and complete the setup wizard, or use the CLI:
+
+```bash
+influx setup \
+  --username admin \
+  --password yourpassword \
+  --org your-org \
+  --bucket scion \
+  --force
+```
+
+Then create an API token with write access to the `scion` bucket and copy it into `INFLUX_TOKEN` in your `.env`.
+
+### Data schema
 
 Each recorded sample is written as:
 
 ```
-measurement: scion_stats        (configurable via INFLUX_MEASUREMENT)
-tags:        session=<name>, field=<min|max|mean|delta|variance|deviation>
+measurement: scion_stats
+tags:        session=<name>  field=<min|max|mean|delta|variance|deviation>
 fields:      value=<float>
-time:        ms
+timestamp:   milliseconds
 ```
 
-Query a session in the Influx UI / Flux:
+Example Flux query to retrieve a session:
 
 ```flux
 from(bucket: "scion")
-  |> range(start: -1h)
+  |> range(start: -24h)
   |> filter(fn: (r) => r._measurement == "scion_stats")
-  |> filter(fn: (r) => r.session == "my-session-name")
+  |> filter(fn: (r) => r.session == "my-session")
   |> pivot(rowKey:["_time"], columnKey:["field"], valueColumn:"_value")
 ```
 
-## Smoke-testing without the real device
+---
 
-In a second terminal:
+## Cloud relay setup
 
-```bash
-OSC_PORT=11046 npm start              # avoid clash with the real source
-PORT=11046 npm run synth              # synthetic OSC at 10 Hz
+The relay allows anyone to watch the live data stream in their browser without needing access to your local machine. `relay.js` is a thin WebSocket fan-out server — your local `server.js` connects to it as a publisher; viewers connect as subscribers.
+
+### 1. Deploy relay.js to Railway
+
+1. Push the repo to GitHub (the `Procfile` tells Railway to run `node relay.js`)
+2. Go to [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo**
+3. Select this repository
+4. In **Variables**, add:
+   ```
+   PUB_SECRET = your-chosen-secret
+   ```
+   Railway sets `PORT` automatically — do not add it manually.
+5. Go to **Settings → Networking → Generate Domain**
+   You will get a URL like `https://scion-relay-production.up.railway.app`
+
+### 2. Configure your local `.env`
+
+```
+RELAY_URL=wss://scion-relay-production.up.railway.app/ws
+PUB_SECRET="your-chosen-secret"
 ```
 
-Or, if 11045 is free, just run `npm run synth` with defaults.
+The value of `PUB_SECRET` must be identical on both sides. Use quotes consistently — if you type `"my-secret"` (with quotes) in Railway's dashboard, use `PUB_SECRET="my-secret"` in your `.env` as well.
+
+### 3. Restart your local server
+
+```bash
+npm start
+```
+
+You should see `[relay] connected to wss://...` in the terminal.
+
+### 4. Share the URL
+
+Send `https://your-relay.up.railway.app/viz` to anyone — they will see the Spiral visualiser receiving your live data.
+
+### Relay diagnostics
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/relay-status` | GET | Publisher connection state, viewer count, cached field values |
+| `/relay-reset` | POST | Clears cached latest values. Requires `x-pub-secret` header |
+
+```bash
+# Check status
+curl https://your-relay.up.railway.app/relay-status
+
+# Clear stale cached values
+curl -X POST https://your-relay.up.railway.app/relay-reset \
+  -H "x-pub-secret: your-chosen-secret"
+```
+
+---
+
+## Visualisers
+
+### Spiral (default at `/viz`)
+
+An Archimedean spiral drawn outward from the centre. The spiral only advances while the watched data field is actively changing; when the signal is still, the drawing freezes. When the spiral reaches the canvas edge it wraps back to the centre, layering new rings over old ones.
+
+**Controls (sidebar → ⊞):**
+
+| Setting | Description |
+|---|---|
+| Watch field | Which of the six fields gates spiral movement |
+| Sensitivity | Minimum per-frame change required to trigger movement |
+| Palette | Colour range mapped from low → high intensity |
+| Show rings | Toggle the arc path of the spiral |
+| Spark style | Lines or dots at each data point |
+| Spark scale | Exaggeration multiplier for spark length |
+| Spark field | Which field drives spark size |
+| Clear trail | Wipe the canvas and restart from centre |
+
+The palette randomises on each edge wrap. All settings persist in `localStorage`.
+
+### Organic Growth (hidden by default)
+
+Particle system driven by live data. Select from the viz picker in the sidebar.
+
+---
+
+## Live chart (`/`)
+
+- **Series toggles** — enable/disable individual fields; state persists across reloads
+- **Window** — rolling time window in seconds
+- **Record / Stop** — writes current session to InfluxDB
+- **Playback** — click any recorded session to replay it in the chart
+
+---
 
 ## REST API
 
-| Method | Path                | Body                       | Notes                          |
-|--------|---------------------|----------------------------|--------------------------------|
-| GET    | `/api/status`       | —                          | Latest values + recording state |
-| POST   | `/api/record/start` | `{ "session": "name?" }`   | 409 if already recording        |
-| POST   | `/api/record/stop`  | —                          | Flushes pending writes          |
+| Method | Path | Body | Response |
+|---|---|---|---|
+| GET | `/api/status` | — | Latest values, OSC config, recording state |
+| POST | `/api/record/start` | `{ "session": "name" }` | 409 if already recording |
+| POST | `/api/record/stop` | — | Flushes pending InfluxDB writes |
+| GET | `/api/sessions` | — | List of recorded sessions |
+| GET | `/api/sessions/:name` | — | Session data as `{ field: [{x,y}] }` |
 
-WebSocket at `/ws` pushes `{ type:"sample", field, value, ts }` per OSC message.
+WebSocket at `/ws` pushes:
 
+```json
+{ "type": "sample",    "field": "mean", "value": 0.42, "ts": 1717286400000 }
+{ "type": "hello",     "latest": { ... }, "recording": { ... } }
+{ "type": "recording", "recording": { "active": true, "session": "...", ... } }
+```
 
+---
 
-# --- OSC source (Pocket Scion) -----------------------------------------------
-# UDP port to listen on for incoming OSC messages from the Pocket Scion device.
-OSC_HOST=127.0.0.1
-OSC_PORT=11046
+## Smoke testing without the device
 
-# --- HTTP / WebSocket server -------------------------------------------------
-HTTP_PORT=3001
+Send synthetic OSC data using the bundled generator:
 
-# --- InfluxDB v2 -------------------------------------------------------------
-# NOTE: InfluxDB on this machine is on 8086
-INFLUX_URL=http://127.0.0.1:8086
-INFLUX_TOKEN=SQIb4KDpxyERVrq9KHb_EX9-vhppempGr_0Vu5Ul-nrRoY6oCPzTOjyChMpgka72R9zpEDE0v4ILtch3JguGiQ==
-INFLUX_ORG=home
-INFLUX_BUCKET=plants
-INFLUX_MEASUREMENT=scion_stats
+```bash
+# Terminal 1 — start the server
+npm start
+
+# Terminal 2 — send synthetic OSC at 10 Hz
+npm run synth
+```
+
+If the default OSC port is already in use:
+
+```bash
+OSC_PORT=11047 npm start
+PORT=11047 npm run synth
+```
+
+---
+
+## Running as a service on Linux
+
+To keep the server running after you close the terminal, use `systemd`:
+
+```ini
+# /etc/systemd/system/scion.service
+[Unit]
+Description=Scion DB
+After=network.target
+
+[Service]
+Type=simple
+User=YOUR_USERNAME
+WorkingDirectory=/path/to/scion-DB
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+EnvironmentFile=/path/to/scion-DB/.env
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now scion
+sudo systemctl status scion
+```
