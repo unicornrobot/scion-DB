@@ -27,6 +27,7 @@ class SacredSpiralVisualizer {
     this.sparkScale  = 1.0;
     this.palette     = 'prism';
     this.sparkStyle  = 'points';
+    this.pointStyle  = 'fill';   // 'fill' | 'stroke'
     this.showRings   = false;
 
     this._angle      = 0;
@@ -199,33 +200,43 @@ class SacredSpiralVisualizer {
 
       const tc = this._tc;
 
-      // Arc segment — colour and thickness driven by current intensity
+      // Opacity maps directly to signal strength: near-zero at low variation,
+      // fully opaque at peak.  Use a power curve so mid-range values still
+      // read clearly rather than clustering near the bottom.
+      const alpha = Math.pow(normalised, 0.6) * 0.8;  // 0 → 0, peak → 0.8
+
+      // Arc segment — colour, thickness and opacity all driven by intensity
       if (this.showRings) {
         tc.beginPath();
         tc.moveTo(this._lastPt.x, this._lastPt.y);
         tc.lineTo(pos.x, pos.y);
-        tc.strokeStyle = this._palColor(normalised, 0.55 + normalised * 0.35);
+        tc.strokeStyle = this._palColor(normalised, alpha);
         tc.lineWidth   = 0.5 + normalised * 2.2;
         tc.lineJoin    = tc.lineCap = 'round';
         tc.stroke();
       }
 
-      // Spark — always at least MIN_SPARK visible so subtle variation is never
-      // invisible; full length scales up with intensity × sparkScale.
+      // Spark — length and opacity both scale with intensity
       const MIN_SPARK = spacing * 0.3;
       const spLen     = MIN_SPARK + normalised * spacing * 3 * this.sparkScale;
       const radA      = this._angle - Math.PI / 2;
       const tipX      = pos.x + Math.cos(radA) * spLen;
       const tipY      = pos.y + Math.sin(radA) * spLen;
       this._sparkTip  = { x: tipX, y: tipY };
-      const color     = this._palColor(normalised, 0.4 + normalised * 0.55);
+      const color     = this._palColor(normalised, alpha);
 
       if (this.sparkStyle === 'points') {
-        // Minimum radius 1.5 px ensures dots are always legible
+        const r = 1.5 + normalised * 3.0;
         tc.beginPath();
-        tc.arc(tipX, tipY, 1.5 + normalised * 3.0, 0, Math.PI * 2);
-        tc.fillStyle = color;
-        tc.fill();
+        tc.arc(tipX, tipY, r, 0, Math.PI * 2);
+        if (this.pointStyle === 'stroke') {
+          tc.strokeStyle = color;
+          tc.lineWidth   = 0.5 + normalised * 1.2;
+          tc.stroke();
+        } else {
+          tc.fillStyle = color;
+          tc.fill();
+        }
       } else {
         tc.beginPath();
         tc.moveTo(pos.x, pos.y);

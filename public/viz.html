@@ -232,6 +232,14 @@
             <option value="points" selected>Points</option>
           </select>
         </div>
+        <div class="ap-row" id="pointStyleRow">
+          <div class="ap-label"><span>Point style</span></div>
+          <select class="ap-select" id="apPointStyle">
+            <option value="fill"   selected>Fill</option>
+            <option value="stroke"         >Stroke</option>
+          </select>
+        </div>
+
         <div class="ap-row">
           <div class="ap-label">
             <span>Spark scale</span>
@@ -312,6 +320,8 @@
     const apBarThresh         = document.getElementById('apBarThresh');
     const apPalette           = document.getElementById('apPalette');
     const apSparkStyle        = document.getElementById('apSparkStyle');
+    const apPointStyle        = document.getElementById('apPointStyle');
+    const pointStyleRow       = document.getElementById('pointStyleRow');
     const apShowRings         = document.getElementById('apShowRings');
     const apSpark             = document.getElementById('apSpark');
     const apSparkScale        = document.getElementById('apSparkScale');
@@ -329,6 +339,7 @@
           sparkScale:  sacredViz.sparkScale,
           palette:     sacredViz.palette,
           sparkStyle:  sacredViz.sparkStyle,
+          pointStyle:  sacredViz.pointStyle,
           showRings:   sacredViz.showRings,
         }));
       } catch (_) {}
@@ -344,6 +355,7 @@
       if (saved.sparkScale  != null) { apSparkScale.value = saved.sparkScale;  sacredViz.sparkScale  = saved.sparkScale;  }
       if (saved.palette     != null) { apPalette.value     = saved.palette;     sacredViz.palette     = saved.palette;     }
       if (saved.sparkStyle  != null) { apSparkStyle.value  = saved.sparkStyle;  sacredViz.sparkStyle  = saved.sparkStyle;  }
+      if (saved.pointStyle  != null) { apPointStyle.value  = saved.pointStyle;  sacredViz.pointStyle  = saved.pointStyle;  }
       if (saved.showRings   != null) { apShowRings.checked = saved.showRings;   sacredViz.showRings   = saved.showRings;   }
 
       // Sync display labels to whatever values ended up applied
@@ -370,8 +382,19 @@
       saveSacredSettings();
     });
 
+    function syncPointStyleRow() {
+      pointStyleRow.style.display = sacredViz.sparkStyle === 'points' ? '' : 'none';
+    }
+    syncPointStyleRow();
+
     apSparkStyle.addEventListener('change', () => {
       sacredViz.sparkStyle = apSparkStyle.value;
+      syncPointStyleRow();
+      saveSacredSettings();
+    });
+
+    apPointStyle.addEventListener('change', () => {
+      sacredViz.pointStyle = apPointStyle.value;
       saveSacredSettings();
     });
 
