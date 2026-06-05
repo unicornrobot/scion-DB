@@ -95,8 +95,16 @@ class SacredSpiralVisualizer {
   // ── Spiral geometry ────────────────────────────────────────────────────────
 
   _ringSpacing() {
-    // Tight rings: ~1.5% of shortest canvas dimension per revolution
     return Math.min(this._w, this._h) * 0.015;
+  }
+
+  // Maximum safe spiral radius: accounts for MIN_SPARK floor, full spark length
+  // at current scale, max point radius (4.5 px), and a 10 px safety margin so
+  // nothing clips the canvas edge regardless of normalised value.
+  _maxR() {
+    const s = this._ringSpacing();
+    const maxSpark = s * 0.3 + s * 3 * this.sparkScale + 4.5 + 10;
+    return Math.min(this._w, this._h) * 0.5 - maxSpark;
   }
 
   _spiralPt(cx, cy, angle) {
@@ -142,9 +150,7 @@ class SacredSpiralVisualizer {
 
       // Edge wrap: when tip hits the boundary, restart from centre without
       // clearing the trail so new rings layer silently over old ones.
-      const maxSparkLen = this._ringSpacing() * 3 * this.sparkScale;
-      const max        = Math.min(w, h) * 0.5 - maxSparkLen;
-      if (r > max) {
+      if (r > this._maxR()) {
         this._angle  = 0;
         this._lastPt = null;    // break the line — don't draw edge-to-centre
         // Pick a new random palette each time the spiral wraps
@@ -271,8 +277,7 @@ class SacredSpiralVisualizer {
 
   _drawSpiralGuide(ctx, cx, cy) {
     const spacing     = this._ringSpacing();
-    const maxSparkLen = spacing * 3 * this.sparkScale;
-    const maxR        = Math.min(this._w, this._h) * 0.5 - maxSparkLen;
+    const maxR        = this._maxR();
     const maxAngle    = Math.max(0, (maxR - 10) * (Math.PI * 2) / spacing);
 
     // ~40 points per full revolution keeps the curve visually smooth
