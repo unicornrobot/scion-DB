@@ -192,9 +192,9 @@
         <div class="ap-row">
           <div class="ap-label">
             <span>Sensitivity</span>
-            <code id="apValDisplay">0.0043</code>
+            <code id="apValDisplay">0.30</code>
           </div>
-          <input type="range" class="ap-range" id="apRange" min="0.0001" max="0.05" step="0.0001" value="0.0043">
+          <input type="range" class="ap-range" id="apRange" min="0" max="1" step="0.01" value="0.3">
         </div>
         <div class="ap-row">
           <div class="ap-label">
@@ -318,7 +318,7 @@
     const apSparkScaleDisplay = document.getElementById('apSparkScaleDisplay');
     const apReset             = document.getElementById('apReset');
 
-    const SACRED_LS_KEY = 'scion-sacred-settings';
+    const SACRED_LS_KEY = 'scion-sacred-settings-v2'; // v2: sensitivity is now 0-1 normalised
 
     function saveSacredSettings() {
       try {
@@ -360,7 +360,7 @@
 
     apRange.addEventListener('input', () => {
       const v = parseFloat(apRange.value);
-      apValDisplay.textContent = v.toFixed(4);
+      apValDisplay.textContent = v.toFixed(2);
       sacredViz.sensitivity = v;
       saveSacredSettings();
     });
@@ -394,22 +394,18 @@
 
     apReset.addEventListener('click', () => sacredViz.clearTrail());
 
-    // Live indicator: shows per-frame change magnitude vs sensitivity
+    // Live indicator: shows normalised change (0-1) vs sensitivity threshold
     setInterval(() => {
-      const change = sacredViz._changeMag || 0;
-      const sens   = sacredViz.sensitivity;
-      const over   = change > sens;
-      // Scale bar so sensitivity tick sits at ~40% width; change can overflow it
-      const barMax   = Math.max(sens * 2.5, change, 0.001);
-      const fillPct  = Math.min(change / barMax * 100, 100);
-      const sensPct  = Math.min(sens   / barMax * 100, 100);
+      const norm = sacredViz._normChange || 0;
+      const sens = sacredViz.sensitivity;
+      const over = norm > sens;
 
       if (apPalette.value !== sacredViz.palette) apPalette.value = sacredViz.palette;
-      apCurrent.textContent = change.toFixed(4);
+      apCurrent.textContent = norm.toFixed(2);
       apCurrent.classList.toggle('over', over);
-      apBarFill.style.width  = fillPct + '%';
+      apBarFill.style.width  = Math.min(norm * 100, 100) + '%';
       apBarFill.classList.toggle('over', over);
-      apBarThresh.style.left = sensPct + '%';
+      apBarThresh.style.left = Math.min(sens * 100, 100) + '%';
     }, 100);
 
     engine.onConnectionChange = (live) => {

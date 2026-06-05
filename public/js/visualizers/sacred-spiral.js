@@ -22,7 +22,7 @@ const SACRED_PALETTES = {
 class SacredSpiralVisualizer {
   constructor() {
     this.watchField  = 'variance';
-    this.sensitivity = 0.0043;
+    this.sensitivity = 0.3;
     this.sparkField  = 'deviation';
     this.sparkScale  = 1.0;
     this.palette     = 'prism';
@@ -34,8 +34,11 @@ class SacredSpiralVisualizer {
     this._tc         = null;
     this._lastPt     = null;
     this._prevSmooth = {};
-    this._changeMag  = 0;   // exposed so the admin panel can read it live
-    this._sparkPeak  = 0.001; // running max of spark field — auto-calibrates scale
+    this._changeMag  = 0;     // raw per-frame absolute change
+    this._changeEma  = 0;     // EMA of _changeMag — smooths OSC-rate gaps at 60 fps
+    this._normChange = 0;     // _changeEma normalised against _changePeak (0-1), exposed for panel
+    this._changePeak = 0.0001; // running max of _changeEma — adapts to session scale
+    this._sparkPeak  = 0.001; // running max of spark field — auto-calibrates spark scale
     this._sparkTip   = null;  // last computed spark tip position
     this._w = 0;
     this._h = 0;
@@ -57,6 +60,9 @@ class SacredSpiralVisualizer {
     this._lastPt     = null;
     this._angle      = 0;
     this._changeMag  = 0;
+    this._changeEma  = 0;
+    this._normChange = 0;
+    this._changePeak = 0.0001;
     this._sparkPeak  = 0.001;
     this._prevSmooth = {};
   }
@@ -68,9 +74,11 @@ class SacredSpiralVisualizer {
   }
 
   clearTrail() {
-    this._angle     = 0;
-    this._lastPt    = null;
-    this._sparkPeak = 0.001;
+    this._angle      = 0;
+    this._lastPt     = null;
+    this._sparkPeak  = 0.001;
+    this._changePeak = 0.0001;
+    this._changeEma  = 0;
     this._initTrail(this._w, this._h);
   }
 
@@ -106,9 +114,19 @@ class SacredSpiralVisualizer {
     const sm = state.smooth;
 
     // ── change detection ───────────────────────────────────────────────────
-    const prevVal   = this._prevSmooth[this.watchField] ?? sm[this.watchField] ?? 0;
-    this._changeMag = Math.abs((sm[this.watchField] ?? 0) - prevVal);
-    const moving    = this._changeMag > this.sensitivity;
+    const prevVal    = this._prevSmooth[this.watchField] ?? sm[this.watchField] ?? 0;
+    this._changeMag  = Math.abs((sm[this.watchField] ?? 0) - prevVal);
+
+    // EMA over ~7 frames bridges the gap between OSC sample rate (≈10 Hz) and
+    // render rate (60 fps) — without it, 5 of every 6 frames have changeMag=0
+    // and subtle signals look flat.
+    this._changeEma  = this._changeEma * 0.85 + this._changeMag * 0.15;
+
+    // Peak decays at ~30 %/s so it re-calibrates within a few seconds when the
+    // signal shifts from an active range to a subtle one.
+    this._changePeak = Math.max(this._changePeak * 0.99, this._changeEma, 0.0001);
+    this._normChange = this._changeEma / this._changePeak;  // 0-1
+    const moving     = this._normChange > this.sensitivity;
 
     // Always snapshot smooth for next frame
     const FIELDS = ['min', 'max', 'mean', 'delta', 'variance', 'deviation'];
@@ -133,7 +151,7 @@ class SacredSpiralVisualizer {
         this.palette = keys[Math.floor(Math.random() * keys.length)];
       }
 
-      this._appendPt(cx, cy, sm);
+      this._appendPt(cx, cy, state);
     }
 
     // ── compose frame ──────────────────────────────────────────────────────
@@ -158,55 +176,64 @@ class SacredSpiralVisualizer {
     return `hsla(${h | 0},${p.s}%,${l | 0}%,${alpha.toFixed(2)})`;
   }
 
-  _appendPt(cx, cy, sm) {
+  _appendPt(cx, cy, state) {
     const pos     = this._spiralPt(cx, cy, this._angle);
     const spacing = this._ringSpacing();
+    const sm      = state.smooth;
 
-    // Normalise spark field against running peak (0–1)
-    const rawSp = Math.abs(sm[this.sparkField] ?? 0);
-    this._sparkPeak  = Math.max(this._sparkPeak * 0.999, rawSp, 0.001);
-    const normalised = rawSp / this._sparkPeak;
+    // Use raw (un-smoothed) spark field value — it captures sample-to-sample
+    // variation that the EMA deliberately flattens out.  Fall back to smooth
+    // if the raw value hasn't arrived yet (null on first connect).
+    const rawSp = Math.abs(
+      (state[this.sparkField] != null ? state[this.sparkField] : sm[this.sparkField]) ?? 0
+    );
+
+    // Peak decays at ~26 %/s so it re-calibrates to the current session range
+    // within a few seconds rather than holding a high-water mark for minutes.
+    this._sparkPeak  = Math.max(this._sparkPeak * 0.995, rawSp, 0.0001);
+    const normalised = rawSp / this._sparkPeak;  // 0–1 relative to recent peak
 
     if (this._lastPt) {
-      // Hold _lastPt fixed on sub-pixel moves so distance accumulates
       const dx = pos.x - this._lastPt.x, dy = pos.y - this._lastPt.y;
       if (dx * dx + dy * dy < 0.5) return;
 
       const tc = this._tc;
 
-      // Arc segment — intensity drives colour and thickness
+      // Arc segment — colour and thickness driven by current intensity
       if (this.showRings) {
         tc.beginPath();
         tc.moveTo(this._lastPt.x, this._lastPt.y);
         tc.lineTo(pos.x, pos.y);
         tc.strokeStyle = this._palColor(normalised, 0.55 + normalised * 0.35);
-        tc.lineWidth   = 0.4 + normalised * 2.2;
+        tc.lineWidth   = 0.5 + normalised * 2.2;
         tc.lineJoin    = tc.lineCap = 'round';
         tc.stroke();
       }
 
-      // Spark — line or point, both intensity-driven
-      const spLen = normalised * spacing * 3 * this.sparkScale;
-      if (spLen > 0.4) {
-        const radA  = this._angle - Math.PI / 2;
-        const tipX  = pos.x + Math.cos(radA) * spLen;
-        const tipY  = pos.y + Math.sin(radA) * spLen;
-        this._sparkTip = { x: tipX, y: tipY };
-        const color = this._palColor(normalised, 0.3 + normalised * 0.65);
-        if (this.sparkStyle === 'points') {
-          tc.beginPath();
-          tc.arc(tipX, tipY, 0.4 + normalised * 2.2, 0, Math.PI * 2);
-          tc.fillStyle = color;
-          tc.fill();
-        } else {
-          tc.beginPath();
-          tc.moveTo(pos.x, pos.y);
-          tc.lineTo(tipX, tipY);
-          tc.strokeStyle = color;
-          tc.lineWidth   = 0.3 + normalised * 1.8;
-          tc.lineCap     = 'round';
-          tc.stroke();
-        }
+      // Spark — always at least MIN_SPARK visible so subtle variation is never
+      // invisible; full length scales up with intensity × sparkScale.
+      const MIN_SPARK = spacing * 0.3;
+      const spLen     = MIN_SPARK + normalised * spacing * 3 * this.sparkScale;
+      const radA      = this._angle - Math.PI / 2;
+      const tipX      = pos.x + Math.cos(radA) * spLen;
+      const tipY      = pos.y + Math.sin(radA) * spLen;
+      this._sparkTip  = { x: tipX, y: tipY };
+      const color     = this._palColor(normalised, 0.4 + normalised * 0.55);
+
+      if (this.sparkStyle === 'points') {
+        // Minimum radius 1.5 px ensures dots are always legible
+        tc.beginPath();
+        tc.arc(tipX, tipY, 1.5 + normalised * 3.0, 0, Math.PI * 2);
+        tc.fillStyle = color;
+        tc.fill();
+      } else {
+        tc.beginPath();
+        tc.moveTo(pos.x, pos.y);
+        tc.lineTo(tipX, tipY);
+        tc.strokeStyle = color;
+        tc.lineWidth   = 0.5 + normalised * 2.0;
+        tc.lineCap     = 'round';
+        tc.stroke();
       }
     }
 
