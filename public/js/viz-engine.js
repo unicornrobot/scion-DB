@@ -102,10 +102,17 @@ class VizEngine {
     const dpr = window.devicePixelRatio || 1;
     const W   = Math.floor(this.canvas.clientWidth  * dpr);
     const H   = Math.floor(this.canvas.clientHeight * dpr);
-    if (this.canvas.width !== W || this.canvas.height !== H) {
+    const changed = this.canvas.width !== W || this.canvas.height !== H;
+    if (changed) {
       this.canvas.width  = W;
       this.canvas.height = H;
-      this.ctx.scale(dpr, dpr);
+    }
+    // Always (re)apply the DPR transform absolutely. Setting canvas.width above
+    // resets the transform to identity, and activate() also resets it — using
+    // setTransform (not cumulative scale) makes this safe to call any time and
+    // guarantees a visualizer switched-to after boot is scaled correctly.
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (changed) {
       this._active?.onResize?.(this.canvas.clientWidth, this.canvas.clientHeight);
     }
   }
