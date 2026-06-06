@@ -169,7 +169,8 @@
     <div class="sb-section">
       <div class="sb-label">Visualizer</div>
       <select id="vizPicker" class="ap-select">
-        <option value="organic" hidden>Organic Growth</option>
+        <option value="plant">Plant Signal</option>
+        <option value="organic">Mycelium</option>
         <option value="sacred" selected>Spiral</option>
       </select>
     </div>
@@ -262,6 +263,135 @@
       </div>
     </div>
 
+    <!-- Plant Signal settings — shown only when that viz is active -->
+    <div id="plantSettings" style="display:none">
+      <div class="sb-section">
+        <div class="sb-label">Signal</div>
+        <div class="ap-row">
+          <div class="ap-label"><span>Watch field</span></div>
+          <select class="ap-select" id="plField">
+            <option value="mean">mean</option>
+            <option value="min">min</option>
+            <option value="max">max</option>
+            <option value="delta">delta</option>
+            <option value="variance">variance</option>
+            <option value="deviation" selected>deviation</option>
+          </select>
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Sensitivity</span>
+            <code id="plSensDisplay">0.30</code>
+          </div>
+          <input type="range" class="ap-range" id="plSens" min="0" max="1" step="0.01" value="0.3">
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Activity</span>
+            <span class="ap-current" id="plCurrent">—</span>
+          </div>
+          <div class="ap-bar-wrap">
+            <div class="ap-bar-fill" id="plBarFill"></div>
+            <div class="ap-bar-thresh" id="plBarThresh"></div>
+          </div>
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Pulse speed</span>
+            <code id="plSpeedDisplay">1.0</code>
+          </div>
+          <input type="range" class="ap-range" id="plSpeed" min="0.2" max="3.0" step="0.1" value="1.0">
+        </div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-label">Appearance</div>
+        <div class="ap-row">
+          <div class="ap-label"><span>Palette</span></div>
+          <select class="ap-select" id="plPalette">
+            <option value="electric" selected>Electric — acid-green</option>
+            <option value="biolum"           >Biolum   — teal blue</option>
+            <option value="fire"             >Fire     — red orange</option>
+            <option value="neural"           >Neural   — purple pink</option>
+          </select>
+        </div>
+        <div class="ap-row" style="display:flex;align-items:center;gap:8px">
+          <input type="checkbox" id="plShowVeins" checked style="accent-color:var(--accent);width:14px;height:14px;cursor:pointer;flex-shrink:0">
+          <label for="plShowVeins" style="font-size:11px;color:var(--muted);cursor:pointer">Show plant</label>
+        </div>
+        <div class="ap-row">
+          <button class="ap-btn" id="plReset">Regrow plant</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mycelium (Physarum) settings — shown only when that viz is active -->
+    <div id="organicSettings" style="display:none">
+      <div class="sb-section">
+        <div class="sb-label">Motion</div>
+        <div class="ap-row">
+          <div class="ap-label"><span>Watch field</span></div>
+          <select class="ap-select" id="phField">
+            <option value="mean">mean</option>
+            <option value="min">min</option>
+            <option value="max">max</option>
+            <option value="delta">delta</option>
+            <option value="variance" selected>variance</option>
+            <option value="deviation">deviation</option>
+          </select>
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Sensitivity</span>
+            <code id="phSensDisplay">0.30</code>
+          </div>
+          <input type="range" class="ap-range" id="phSens" min="0" max="1" step="0.01" value="0.3">
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Activity</span>
+            <span class="ap-current" id="phCurrent">—</span>
+          </div>
+          <div class="ap-bar-wrap">
+            <div class="ap-bar-fill" id="phBarFill"></div>
+            <div class="ap-bar-thresh" id="phBarThresh"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-label">Appearance</div>
+        <div class="ap-row">
+          <div class="ap-label"><span>Palette</span></div>
+          <select class="ap-select" id="phPalette">
+            <option value="biolum"   selected>Biolum   — blue › teal</option>
+            <option value="mycelium"          >Mycelium — amber › lime</option>
+            <option value="aurora"            >Aurora   — teal › violet</option>
+            <option value="void"              >Void     — indigo › rose</option>
+            <option value="prism"             >Prism    — full spectrum</option>
+          </select>
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Decay</span>
+            <code id="phDecayDisplay">0.005</code>
+          </div>
+          <input type="range" class="ap-range" id="phDecay" min="0.001" max="0.020" step="0.001" value="0.005">
+        </div>
+        <div class="ap-row">
+          <div class="ap-label"><span>Agents</span></div>
+          <select class="ap-select" id="phAgents">
+            <option value="400">Low — 400</option>
+            <option value="1200" selected>Medium — 1200</option>
+            <option value="2400">High — 2400</option>
+          </select>
+        </div>
+        <div class="ap-row">
+          <button class="ap-btn" id="phReset">Clear &amp; reset</button>
+        </div>
+      </div>
+    </div>
+
     <div class="sb-section">
       <a href="/" class="ap-btn" style="text-align:center;text-decoration:none;display:block">← Back to Chart</a>
     </div>
@@ -283,20 +413,26 @@
   </div>
 
   <script src="/js/viz-engine.js"></script>
-  <script src="/js/visualizers/organic-growth.js"></script>
+  <script src="/js/visualizers/physarum.js"></script>
+  <script src="/js/visualizers/plant-signal.js"></script>
   <script src="/js/visualizers/sacred-spiral.js"></script>
   <script>
     // ── Boot ──────────────────────────────────────────────────────────────
-    const canvas    = document.getElementById('viz');
-    const engine    = new VizEngine(canvas);
-    const sacredViz = new SacredSpiralVisualizer();
+    const canvas      = document.getElementById('viz');
+    const engine      = new VizEngine(canvas);
+    const sacredViz   = new SacredSpiralVisualizer();
+    const physarumViz = new PhysarumVisualizer();
+    const plantViz    = new PlantSignalVisualizer();
 
-    engine.register('organic', new OrganicGrowthVisualizer());
+    engine.register('plant',   plantViz);
+    engine.register('organic', physarumViz);
     engine.register('sacred',  sacredViz);
     engine.activate('sacred');
 
-    const sidebar        = document.getElementById('sidebar');
-    const sacredSettings = document.getElementById('sacredSettings');
+    const sidebar         = document.getElementById('sidebar');
+    const sacredSettings  = document.getElementById('sacredSettings');
+    const organicSettings = document.getElementById('organicSettings');
+    const plantSettings   = document.getElementById('plantSettings');
 
     document.getElementById('sidebarToggle').addEventListener('click', () => {
       sidebar.classList.toggle('open');
@@ -304,7 +440,9 @@
 
     function setViz(name) {
       engine.activate(name);
-      sacredSettings.style.display = name === 'sacred' ? '' : 'none';
+      sacredSettings.style.display  = name === 'sacred'  ? '' : 'none';
+      organicSettings.style.display = name === 'organic' ? '' : 'none';
+      plantSettings.style.display   = name === 'plant'   ? '' : 'none';
     }
 
     document.getElementById('vizPicker').addEventListener('change', (e) => {
@@ -429,6 +567,181 @@
       apBarFill.style.width  = Math.min(norm * 100, 100) + '%';
       apBarFill.classList.toggle('over', over);
       apBarThresh.style.left = Math.min(sens * 100, 100) + '%';
+    }, 100);
+
+    // ── Physarum (Mycelium) panel wiring ──────────────────────────────────
+    const phField        = document.getElementById('phField');
+    const phSens         = document.getElementById('phSens');
+    const phSensDisplay  = document.getElementById('phSensDisplay');
+    const phCurrent      = document.getElementById('phCurrent');
+    const phBarFill      = document.getElementById('phBarFill');
+    const phBarThresh    = document.getElementById('phBarThresh');
+    const phPalette      = document.getElementById('phPalette');
+    const phDecay        = document.getElementById('phDecay');
+    const phDecayDisplay = document.getElementById('phDecayDisplay');
+    const phAgents       = document.getElementById('phAgents');
+    const phReset        = document.getElementById('phReset');
+
+    const PHYS_LS_KEY = 'scion-physarum-settings-v1';
+
+    function savePhysarumSettings() {
+      try {
+        localStorage.setItem(PHYS_LS_KEY, JSON.stringify({
+          watchField:  physarumViz.watchField,
+          sensitivity: physarumViz.sensitivity,
+          palette:     physarumViz.palette,
+          agentCount:  physarumViz.agentCount,
+          decayRate:   physarumViz.decayRate,
+        }));
+      } catch (_) {}
+    }
+
+    function loadPhysarumSettings() {
+      let saved = {};
+      try { saved = JSON.parse(localStorage.getItem(PHYS_LS_KEY)) || {}; } catch (_) {}
+      if (saved.watchField  != null) { phField.value   = saved.watchField;         physarumViz.watchField  = saved.watchField;  }
+      if (saved.sensitivity != null) { phSens.value    = saved.sensitivity;        physarumViz.sensitivity = saved.sensitivity; }
+      if (saved.palette     != null) { phPalette.value = saved.palette;            physarumViz.palette     = saved.palette;     }
+      if (saved.agentCount  != null) { phAgents.value  = String(saved.agentCount); physarumViz.agentCount  = saved.agentCount;  }
+      if (saved.decayRate   != null) { phDecay.value   = saved.decayRate;          physarumViz.decayRate   = saved.decayRate;   }
+      phSensDisplay.textContent  = physarumViz.sensitivity.toFixed(2);
+      phDecayDisplay.textContent = physarumViz.decayRate.toFixed(3);
+    }
+
+    loadPhysarumSettings();
+
+    phField.addEventListener('change', () => {
+      physarumViz.watchField = phField.value;
+      savePhysarumSettings();
+    });
+
+    phSens.addEventListener('input', () => {
+      const v = parseFloat(phSens.value);
+      phSensDisplay.textContent = v.toFixed(2);
+      physarumViz.sensitivity = v;
+      savePhysarumSettings();
+    });
+
+    phPalette.addEventListener('change', () => {
+      physarumViz.palette = phPalette.value;
+      savePhysarumSettings();
+    });
+
+    phDecay.addEventListener('input', () => {
+      const v = parseFloat(phDecay.value);
+      phDecayDisplay.textContent = v.toFixed(3);
+      physarumViz.decayRate = v;
+      savePhysarumSettings();
+    });
+
+    phAgents.addEventListener('change', () => {
+      physarumViz.agentCount = parseInt(phAgents.value, 10);
+      physarumViz._initAgents();
+      savePhysarumSettings();
+    });
+
+    phReset.addEventListener('click', () => physarumViz.clearTrail());
+
+    // Live activity bar for Mycelium
+    setInterval(() => {
+      if (organicSettings.style.display === 'none') return;
+      const norm = physarumViz._normChange || 0;
+      const sens = physarumViz.sensitivity;
+      const over = norm > sens;
+      phCurrent.textContent = norm.toFixed(2);
+      phCurrent.classList.toggle('over', over);
+      phBarFill.style.width  = Math.min(norm * 100, 100) + '%';
+      phBarFill.classList.toggle('over', over);
+      phBarThresh.style.left = Math.min(sens * 100, 100) + '%';
+    }, 100);
+
+    // ── Plant Signal panel wiring ─────────────────────────────────────────
+    const plField        = document.getElementById('plField');
+    const plSens         = document.getElementById('plSens');
+    const plSensDisplay  = document.getElementById('plSensDisplay');
+    const plCurrent      = document.getElementById('plCurrent');
+    const plBarFill      = document.getElementById('plBarFill');
+    const plBarThresh    = document.getElementById('plBarThresh');
+    const plPalette      = document.getElementById('plPalette');
+    const plSpeed        = document.getElementById('plSpeed');
+    const plSpeedDisplay = document.getElementById('plSpeedDisplay');
+    const plShowVeins    = document.getElementById('plShowVeins');
+    const plReset        = document.getElementById('plReset');
+
+    const PLANT_LS_KEY = 'scion-plant-settings-v1';
+
+    function savePlantSettings() {
+      try {
+        localStorage.setItem(PLANT_LS_KEY, JSON.stringify({
+          watchField:  plantViz.watchField,
+          sensitivity: plantViz.sensitivity,
+          palette:     plantViz.palette,
+          pulseSpeed:  plantViz.pulseSpeed,
+          showVeins:   plantViz.showVeins,
+        }));
+      } catch (_) {}
+    }
+
+    function loadPlantSettings() {
+      let saved = {};
+      try { saved = JSON.parse(localStorage.getItem(PLANT_LS_KEY)) || {}; } catch (_) {}
+      if (saved.watchField  != null) { plField.value       = saved.watchField;  plantViz.watchField  = saved.watchField;  }
+      if (saved.sensitivity != null) { plSens.value        = saved.sensitivity; plantViz.sensitivity = saved.sensitivity; }
+      if (saved.palette     != null) { plPalette.value     = saved.palette;     plantViz.palette     = saved.palette;     }
+      if (saved.pulseSpeed  != null) { plSpeed.value       = saved.pulseSpeed;  plantViz.pulseSpeed  = saved.pulseSpeed;  }
+      if (saved.showVeins   != null) { plShowVeins.checked = saved.showVeins;   plantViz.showVeins   = saved.showVeins;   }
+      plSensDisplay.textContent  = plantViz.sensitivity.toFixed(2);
+      plSpeedDisplay.textContent = plantViz.pulseSpeed.toFixed(1);
+    }
+
+    loadPlantSettings();
+
+    plField.addEventListener('change', () => {
+      plantViz.watchField = plField.value;
+      savePlantSettings();
+    });
+
+    plSens.addEventListener('input', () => {
+      const v = parseFloat(plSens.value);
+      plSensDisplay.textContent = v.toFixed(2);
+      plantViz.sensitivity = v;
+      savePlantSettings();
+    });
+
+    plPalette.addEventListener('change', () => {
+      plantViz.palette = plPalette.value;
+      savePlantSettings();
+    });
+
+    plSpeed.addEventListener('input', () => {
+      const v = parseFloat(plSpeed.value);
+      plSpeedDisplay.textContent = v.toFixed(1);
+      plantViz.pulseSpeed = v;
+      savePlantSettings();
+    });
+
+    plShowVeins.addEventListener('change', () => {
+      plantViz.showVeins = plShowVeins.checked;
+      savePlantSettings();
+    });
+
+    // Regrow generates a new random plant structure
+    plReset.addEventListener('click', () => {
+      plantViz._pulses = [];
+      plantViz._buildPlant();
+    });
+
+    // Live activity bar for Plant Signal
+    setInterval(() => {
+      if (plantSettings.style.display === 'none') return;
+      const norm = plantViz._normChange || 0;
+      const sens = plantViz.sensitivity;
+      const over = norm > sens;
+      plCurrent.textContent = norm.toFixed(2);
+      plCurrent.classList.toggle('over', over);
+      plBarFill.style.width  = Math.min(norm * 100, 100) + '%';
+      plBarFill.classList.toggle('over', over);
+      plBarThresh.style.left = Math.min(sens * 100, 100) + '%';
     }, 100);
 
     engine.onConnectionChange = (live) => {
