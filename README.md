@@ -44,8 +44,10 @@ Pocket Scion (UDP/OSC)
 ## Features
 
 - **Live chart** — rolling time-series of all six fields with toggleable series, spike filtering, and configurable time window
-- **Spiral visualiser** — change-driven Archimedean spiral; progresses only when the signal is actively varying, with radial spark lines scaled to data amplitude
-- **Organic Growth visualiser** — particle/growth canvas visualiser (hidden from picker by default)
+- **Three live visualisers** — switchable from the sidebar:
+  - **Spiral** — change-driven Archimedean spiral with radial spark lines scaled to data amplitude
+  - **Plant Signal** — a generative curved plant with electrical action-potential pulses travelling from the root out through every branch and leaf
+  - **Mycelium** — a Physarum (slime-mould) agent simulation that self-organises into glowing flow networks
 - **Session recording** — writes to InfluxDB v2 with per-session tagging; playback in the chart view
 - **Cloud relay** — thin WebSocket fan-out server; deploy once to Railway, share a URL with anyone
 
@@ -235,28 +237,51 @@ curl -X POST https://your-relay.up.railway.app/relay-reset \
 
 ## Visualisers
 
+Pick a visualiser from the **Visualizer** dropdown in the sidebar. Each has its own settings panel below the picker, and all settings persist in `localStorage`.
+
+All three share the same change-detection model: an EMA of the watched field's per-frame change is normalised against a self-calibrating running peak, giving a scale-independent **activity** value (0–1) that is compared against the **Sensitivity** threshold. This adapts automatically as the signal's range shifts between sessions.
+
 ### Spiral (default at `/viz`)
 
-An Archimedean spiral drawn outward from the centre. The spiral only advances while the watched data field is actively changing; when the signal is still, the drawing freezes. When the spiral reaches the canvas edge it wraps back to the centre, layering new rings over old ones.
-
-**Controls (sidebar → ⊞):**
+An Archimedean spiral drawn outward from the centre. The spiral only advances while the watched field is actively changing; when the signal is still, the drawing freezes. When the spiral reaches the canvas edge it wraps back to the centre, layering new rings over old ones. The palette randomises on each edge wrap.
 
 | Setting | Description |
 |---|---|
 | Watch field | Which of the six fields gates spiral movement |
-| Sensitivity | Minimum per-frame change required to trigger movement |
+| Sensitivity | Normalised activity threshold required to trigger movement |
 | Palette | Colour range mapped from low → high intensity |
 | Show rings | Toggle the arc path of the spiral |
 | Spark style | Lines or dots at each data point |
+| Point style | Fill or stroke (points style only) |
 | Spark scale | Exaggeration multiplier for spark length |
 | Spark field | Which field drives spark size |
 | Clear trail | Wipe the canvas and restart from centre |
 
-The palette randomises on each edge wrap. All settings persist in `localStorage`.
+### Plant Signal
 
-### Organic Growth (hidden by default)
+A generative plant — a curved, gravity-drooping stem with branching twigs and leaves — grown procedurally each time. When the watched field is active, electrical action-potential pulses are born at the root electrode and travel up the vascular network, splitting at every junction so the signal reaches every branch and leaf. Edges and leaves the signal touches light up and slowly fade, so activity ripples visibly across the whole plant. Stronger signals fire faster, denser pulse trains.
 
-Particle system driven by live data. Select from the viz picker in the sidebar.
+| Setting | Description |
+|---|---|
+| Watch field | Which field triggers new pulses |
+| Sensitivity | Normalised activity threshold for firing |
+| Pulse speed | Speed multiplier for travelling pulses |
+| Palette | Pulse colour theme (Electric / Biolum / Fire / Neural) |
+| Show plant | Toggle the dark plant structure behind the pulses |
+| Regrow plant | Generate a fresh random plant structure |
+
+### Mycelium
+
+A multi-agent Physarum (slime-mould) chemotaxis simulation. Agents deposit a chemical trail and steer toward the strongest gradient, self-organising into branching flow networks reminiscent of mycelium or root systems. The trail diffuses and decays every frame; live data drives agent speed and deposit strength, so the network densifies when the signal is active and thins as it goes quiet.
+
+| Setting | Description |
+|---|---|
+| Watch field | Which field drives overall activity |
+| Sensitivity | Normalised activity threshold |
+| Palette | Trail colour range (Biolum / Mycelium / Aurora / Void / Prism) |
+| Decay | Per-frame trail fade rate — low accumulates, high stays ephemeral |
+| Agents | Agent count (Low 400 / Medium 1200 / High 2400) |
+| Clear & reset | Wipe the trail and re-scatter agents |
 
 ---
 
