@@ -1,6 +1,7 @@
 require('dotenv').config();
 
 const path = require('path');
+const fs   = require('fs');
 const http = require('http');
 const express = require('express');
 const { WebSocketServer } = require('ws');
@@ -18,6 +19,25 @@ const INFLUX_BUCKET = process.env.INFLUX_BUCKET || 'scion';
 const INFLUX_MEASUREMENT = process.env.INFLUX_MEASUREMENT || 'scion_stats';
 
 const TRACKED_FIELDS = ['min', 'max', 'mean', 'delta', 'variance', 'deviation'];
+
+// ---------------------------------------------------------------------------
+// Data directory — plant metadata, session meta, and snapshots.
+// ---------------------------------------------------------------------------
+const DATA_DIR   = path.join(__dirname, 'data');
+const PLANT_FILE = path.join(DATA_DIR, 'current-plant.json');
+const META_FILE  = path.join(DATA_DIR, 'meta.json');
+const SNAP_DIR   = path.join(DATA_DIR, 'snapshots');
+
+fs.mkdirSync(DATA_DIR, { recursive: true });
+fs.mkdirSync(SNAP_DIR, { recursive: true });
+
+function readJSON(file, fallback = {}) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); }
+  catch { return fallback; }
+}
+function writeJSON(file, data) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
+}
 
 // ---------------------------------------------------------------------------
 // State: latest values accumulated across OSC messages, and recording state.
@@ -107,10 +127,60 @@ async function flushAndCloseWriteApi() {
 // Express HTTP server + WebSocket upgrade.
 // ---------------------------------------------------------------------------
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '20mb' }));  // snapshots are base64-encoded PNGs
 app.use(express.static(path.join(__dirname, 'public')));
-app.get('/viz', (_req, res) =>
-  res.sendFile(path.join(__dirname, 'public', 'viz.html')));
+app.use('/snapshots', express.static(SNAP_DIR));
+app.get('/viz',       (_req, res) => res.sendFile(path.join(__dirname, 'public', 'viz.html')));
+app.get('/dashboard', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'dashboard.html')));
+
+// ── Current plant profile ──────────────────────────────────────────────────
+
+app.get('/api/plant', (_req, res) => {
+  res.json(readJSON(PLANT_FILE, {}));
+});
+
+app.post('/api/plant', (req, res) => {
+  const { name = '', species = '', notes = '', url = '' } = req.body || {};
+  const plant = { name, species, notes, url };
+  writeJSON(PLANT_FILE, plant);
+  res.json({ ok: true, plant });
+});
+
+// ── Session metadata (plant info + snapshot flag) ──────────────────────────
+
+app.get('/api/sessions/:name/meta', (req, res) => {
+  const meta = readJSON(META_FILE, {});
+  res.json(meta[req.params.name] || {});
+});
+
+app.post('/api/sessions/:name/meta', (req, res) => {
+  const meta = readJSON(META_FILE, {});
+  meta[req.params.name] = { ...(meta[req.params.name] || {}), ...req.body };
+  writeJSON(META_FILE, meta);
+  res.json({ ok: true, meta: meta[req.params.name] });
+});
+
+// ── Snapshot upload (base64 PNG from the visualiser canvas) ───────────────
+
+app.post('/api/sessions/:name/snapshot', (req, res) => {
+  const { dataUrl } = req.body || {};
+  if (!dataUrl || !dataUrl.startsWith('data:image/png;base64,')) {
+    return res.status(400).json({ error: 'invalid dataUrl' });
+  }
+  const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
+  const safe   = req.params.name.replace(/[^a-zA-Z0-9_\-]/g, '_');
+  const file   = path.join(SNAP_DIR, `${safe}.png`);
+  try {
+    fs.writeFileSync(file, Buffer.from(base64, 'base64'));
+    // Mark session as having a snapshot in meta.json
+    const meta = readJSON(META_FILE, {});
+    meta[req.params.name] = { ...(meta[req.params.name] || {}), hasSnapshot: true };
+    writeJSON(META_FILE, meta);
+    res.json({ ok: true, url: `/snapshots/${safe}.png` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.get('/api/status', (_req, res) => {
   res.json({
@@ -154,12 +224,14 @@ app.get('/api/sessions', async (_req, res) => {
     const countMap = {};
     for (const r of countRows) if (r.session) countMap[r.session] = Number(r._value);
 
+    const meta = readJSON(META_FILE, {});
     const sessions = Object.keys(startMap)
       .map((s) => ({
         session: s,
         startMs: startMap[s],
         endMs:   endMap[s]   ?? startMap[s],
         points:  countMap[s] ?? 0,
+        ...(meta[s] || {}),
       }))
       .sort((a, b) => b.endMs - a.endMs);
 
@@ -272,6 +344,16 @@ app.post('/api/record/start', (req, res) => {
   recording.startedAt = Date.now();
   recording.pointsWritten = 0;
   recording.lastError = null;
+
+  // Snapshot current plant profile into this session's metadata so the
+  // dashboard can display it even after the plant profile changes.
+  const plant = readJSON(PLANT_FILE, {});
+  if (plant.name || plant.species) {
+    const sessionMeta = readJSON(META_FILE, {});
+    sessionMeta[session] = { ...(sessionMeta[session] || {}), plant, recordedAt: Date.now() };
+    writeJSON(META_FILE, sessionMeta);
+  }
+
   console.log(`[record] start session=${session}`);
   broadcast({ type: 'recording', recording });
   res.json({ ok: true, recording });

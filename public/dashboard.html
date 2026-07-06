@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Scion · Dashboard</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root {
+      --bg:       #090d0b;
+      --panel:    #0d1210;
+      --border:   #1e2a22;
+      --border-l: #2a3d30;
+      --fg:       #d8e6da;
+      --muted:    #6a8872;
+      --accent:   #4cc9f0;
+      --ok:       #06d6a0;
+      --plant:    #3a7d44;
+      --plant-l:  #6ab87a;
+      --mono:     "SF Mono","Fira Code",monospace;
+      --card-glow: 0 2px 18px rgba(0,200,80,.05);
+      --card-hov:  0 4px 28px rgba(0,200,80,.12);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font: 13px/1.5 -apple-system,"Segoe UI",system-ui,sans-serif; }
+    body { background: var(--bg); color: var(--fg); min-height: 100vh; }
+
+    /* ── Header ──────────────────────────────────────────────────────────── */
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 24px; height: 52px;
+      background: rgba(13,18,16,.97);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 100;
+      backdrop-filter: blur(10px);
+    }
+    .hdr-brand {
+      font-size: 13px; font-weight: 600; letter-spacing: .4px;
+      color: var(--fg);
+    }
+    .hdr-brand span { color: var(--plant-l); }
+    .hdr-conn { display: flex; align-items: center; gap: 7px; }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; transition: background .4s; }
+    .dot.live { background: var(--ok); box-shadow: 0 0 5px var(--ok); }
+    .conn-label { font-size: 11px; color: var(--muted); }
+    .conn-label.live { color: var(--ok); }
+    nav.hdr-nav { display: flex; gap: 4px; }
+    nav.hdr-nav a {
+      padding: 5px 12px; border-radius: 6px;
+      font-size: 12px; text-decoration: none;
+      color: var(--muted); border: 1px solid transparent;
+      transition: color .15s, border-color .15s;
+    }
+    nav.hdr-nav a:hover { color: var(--fg); border-color: var(--border-l); }
+
+    /* ── Page layout ─────────────────────────────────────────────────────── */
+    .page { max-width: 1400px; margin: 0 auto; padding: 24px 24px 48px; }
+
+    /* ── Section labels ──────────────────────────────────────────────────── */
+    .section-label {
+      font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+      color: var(--muted); font-weight: 700; margin-bottom: 14px;
+    }
+
+    /* ── Live pane ───────────────────────────────────────────────────────── */
+    .live-pane {
+      display: grid;
+      grid-template-columns: 1fr 280px;
+      gap: 16px;
+      margin-bottom: 36px;
+    }
+    @media (max-width: 900px) {
+      .live-pane { grid-template-columns: 1fr; }
+      .live-viz  { aspect-ratio: 16/9; }
+    }
+
+    .live-viz {
+      position: relative; border-radius: 10px; overflow: hidden;
+      border: 1px solid var(--border); background: #000;
+      box-shadow: var(--card-glow);
+      min-height: 320px;
+    }
+    .live-viz iframe {
+      position: absolute; inset: 0; width: 100%; height: 100%;
+      border: none; display: block;
+    }
+
+    /* ── Live readings panel ─────────────────────────────────────────────── */
+    .live-panel {
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .live-readings {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 10px; padding: 16px;
+      box-shadow: var(--card-glow); flex: 1;
+    }
+    .live-plant {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px;
+      box-shadow: var(--card-glow);
+    }
+    .lp-name {
+      font-size: 13px; font-weight: 600; color: var(--plant-l);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .lp-species {
+      font-size: 11px; color: var(--muted); font-style: italic;
+      margin-top: 2px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .lp-none { font-size: 11px; color: var(--muted); }
+
+    /* sparkline rows */
+    .spark-row {
+      display: grid; grid-template-columns: 52px 1fr 52px;
+      gap: 0 8px; align-items: center;
+      margin-bottom: 8px;
+    }
+    .spark-row:last-child { margin-bottom: 0; }
+    .spark-field { font-size: 10px; color: var(--muted); font-family: var(--mono); }
+    .spark-val   { font-size: 10px; color: var(--fg); font-family: var(--mono); text-align: right; }
+    .spark-canvas { display: block; width: 100%; height: 28px; }
+
+    /* ── Gallery ─────────────────────────────────────────────────────────── */
+    .gallery-header {
+      display: flex; align-items: baseline; justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .gallery-empty {
+      color: var(--muted); font-size: 12px; padding: 32px 0;
+      text-align: center; border: 1px dashed var(--border);
+      border-radius: 10px;
+    }
+
+    /* card grid */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid rgba(58,125,68,.30);
+      border-radius: 10px; overflow: hidden;
+      box-shadow: var(--card-glow);
+      transition: box-shadow .2s, border-color .2s;
+      display: flex; flex-direction: column;
+    }
+    .card:hover {
+      box-shadow: var(--card-hov);
+      border-color: rgba(106,184,122,.45);
+    }
+
+    .card-thumb {
+      position: relative; aspect-ratio: 16/9; background: #050908;
+      overflow: hidden; flex-shrink: 0;
+    }
+    .card-thumb img {
+      width: 100%; height: 100%; object-fit: cover; display: block;
+      opacity: .92;
+    }
+    .card-thumb canvas {
+      display: block; width: 100%; height: 100%;
+    }
+
+    .card-body { padding: 12px 14px; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+
+    .card-plant-name {
+      font-size: 13px; font-weight: 600; color: var(--plant-l);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .card-plant-row {
+      display: flex; align-items: center; gap: 4px;
+      font-size: 11px; color: var(--muted);
+    }
+    .card-plant-row em { font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+    .card-plant-row a { color: var(--accent); text-decoration: none; font-size: 11px; flex-shrink: 0; }
+    .card-plant-row a:hover { text-decoration: underline; }
+
+    .card-divider { border: none; border-top: 1px solid var(--border); }
+
+    .card-meta {
+      font-size: 11px; color: var(--muted); font-family: var(--mono);
+    }
+    .card-date { font-size: 11px; color: var(--fg); margin-bottom: 2px; }
+    .card-footer { margin-top: auto; padding-top: 8px; }
+    .card-link {
+      display: block; text-align: center;
+      padding: 6px 10px; border-radius: 6px;
+      border: 1px solid var(--border-l); color: var(--muted);
+      font-size: 11px; text-decoration: none;
+      transition: color .15s, border-color .15s;
+    }
+    .card-link:hover { color: var(--fg); border-color: var(--plant); }
+
+    .badge-rec {
+      position: absolute; top: 6px; right: 6px;
+      padding: 2px 6px; border-radius: 4px;
+      background: rgba(0,0,0,.7); border: 1px solid var(--plant);
+      color: var(--plant-l); font-size: 9px; font-family: var(--mono);
+      letter-spacing: 1px; text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="hdr-brand">Scion · <span>Dashboard</span></div>
+    <div class="hdr-conn">
+      <span class="dot" id="connDot"></span>
+      <span class="conn-label" id="connLabel">connecting…</span>
+    </div>
+    <nav class="hdr-nav">
+      <a href="/viz">Visualizer</a>
+      <a href="/">Chart</a>
+    </nav>
+  </header>
+
+  <div class="page">
+
+    <!-- Live pane -->
+    <div class="section-label">Live</div>
+    <div class="live-pane">
+
+      <div class="live-viz">
+        <iframe src="/viz?embed" title="Live Visualizer" allow="autoplay"></iframe>
+      </div>
+
+      <div class="live-panel">
+        <div class="live-plant" id="livePlant">
+          <div class="lp-none">No plant set — open the visualizer to add one.</div>
+        </div>
+        <div class="live-readings">
+          <div class="section-label" style="margin-bottom:10px">Readings</div>
+          <div id="sparkRows"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Gallery -->
+    <div class="gallery-header">
+      <div class="section-label" style="margin-bottom:0">Recordings</div>
+    </div>
+    <div id="gallery"><div class="gallery-empty">No recordings found.</div></div>
+
+  </div>
+
+  <script>
+    // ── Fields / colours ──────────────────────────────────────────────────
+    const FIELDS = ['min', 'max', 'mean', 'delta', 'variance', 'deviation'];
+    const COLORS = {
+      min: '#4cc9f0', max: '#f72585', mean: '#ffd166',
+      delta: '#06d6a0', variance: '#b388ff', deviation: '#ff8c42',
+    };
+    const SPARK_LEN = 80;
+
+    // ── Build sparkline rows ──────────────────────────────────────────────
+    const sparkHist = Object.fromEntries(FIELDS.map(f => [f, []]));
+    const sparkCtxs = {};
+    const sparkRows = document.getElementById('sparkRows');
+
+    function buildSparkRows() {
+      const dpr = window.devicePixelRatio || 1;
+      for (const f of FIELDS) {
+        const row = document.createElement('div');
+        row.className = 'spark-row';
+        row.innerHTML = `
+          <span class="spark-field">${f}</span>
+          <canvas class="spark-canvas" id="dsp-${f}" height="28"></canvas>
+          <span class="spark-val" id="dsv-${f}">—</span>`;
+        sparkRows.appendChild(row);
+      }
+      // Size canvases after they're in the DOM
+      requestAnimationFrame(() => {
+        for (const f of FIELDS) {
+          const c = document.getElementById('dsp-' + f);
+          const w = c.offsetWidth || 160;
+          c.width  = Math.round(w * dpr);
+          c.height = Math.round(28 * dpr);
+          const cx = c.getContext('2d');
+          cx.scale(dpr, dpr);
+          sparkCtxs[f] = { cx, w, h: 28 };
+        }
+      });
+    }
+    buildSparkRows();
+
+    function drawSpark(field, smooth) {
+      const sc = sparkCtxs[field];
+      if (!sc) return;
+      const { cx, w, h } = sc;
+      const data = sparkHist[field];
+      cx.clearRect(0, 0, w, h);
+      if (data.length < 2) return;
+
+      let lo = Infinity, hi = -Infinity;
+      for (const v of data) { if (v < lo) lo = v; if (v > hi) hi = v; }
+      const span = hi - lo || 1;
+      const pad  = 2;
+      const innerH = h - pad * 2;
+      const xp = i => (i / (data.length - 1)) * w;
+      const yp = v => pad + innerH - ((v - lo) / span) * innerH;
+
+      cx.beginPath();
+      cx.moveTo(xp(0), h);
+      for (let i = 0; i < data.length; i++) cx.lineTo(xp(i), yp(data[i]));
+      cx.lineTo(xp(data.length - 1), h);
+      cx.closePath();
+      cx.fillStyle = COLORS[field] + '22';
+      cx.fill();
+
+      cx.beginPath();
+      for (let i = 0; i < data.length; i++) {
+        const px = xp(i), py = yp(data[i]);
+        i === 0 ? cx.moveTo(px, py) : cx.lineTo(px, py);
+      }
+      cx.strokeStyle = COLORS[field];
+      cx.lineWidth = 1.2;
+      cx.lineJoin = cx.lineCap = 'round';
+      cx.stroke();
+
+      // dot at latest
+      cx.beginPath();
+      cx.arc(xp(data.length - 1), yp(data[data.length - 1]), 2, 0, Math.PI * 2);
+      cx.fillStyle = COLORS[field];
+      cx.fill();
+    }
+
+    // ── WebSocket ─────────────────────────────────────────────────────────
+    const smooth = Object.fromEntries(FIELDS.map(f => [f, null]));
+
+    function fmt(v) {
+      if (v === null || v === undefined) return '—';
+      const a = Math.abs(v);
+      if (a >= 1000 || (a > 0 && a < 0.001)) return v.toExponential(2);
+      return v.toFixed(3);
+    }
+
+    function connectWs() {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const ws = new WebSocket(`${proto}://${location.host}/ws`);
+      const ALPHA = 0.12;
+
+      ws.onopen = () => {
+        document.getElementById('connDot').classList.add('live');
+        document.getElementById('connLabel').classList.add('live');
+        document.getElementById('connLabel').textContent = 'live';
+      };
+      ws.onclose = () => {
+        document.getElementById('connDot').classList.remove('live');
+        document.getElementById('connLabel').classList.remove('live');
+        document.getElementById('connLabel').textContent = 'reconnecting…';
+        setTimeout(connectWs, 3000);
+      };
+      ws.onerror = () => ws.close();
+
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'sample') {
+            const f = msg.field;
+            if (smooth[f] === null) smooth[f] = msg.value;
+            else smooth[f] += ALPHA * (msg.value - smooth[f]);
+          } else if (msg.type === 'hello' && msg.latest) {
+            for (const f of FIELDS) {
+              if (msg.latest[f] != null) smooth[f] = msg.latest[f];
+            }
+          }
+        } catch (_) {}
+      };
+    }
+    connectWs();
+
+    // Tick readings display at 4 Hz
+    setInterval(() => {
+      for (const f of FIELDS) {
+        const v = smooth[f];
+        const el = document.getElementById('dsv-' + f);
+        if (el) el.textContent = fmt(v);
+        if (typeof v === 'number' && Number.isFinite(v)) {
+          const hist = sparkHist[f];
+          hist.push(v);
+          if (hist.length > SPARK_LEN) hist.shift();
+          drawSpark(f, v);
+        }
+      }
+    }, 250);
+
+    // ── Current plant ─────────────────────────────────────────────────────
+    async function loadLivePlant() {
+      try {
+        const p = await fetch('/api/plant').then(r => r.json());
+        const el = document.getElementById('livePlant');
+        if (p.name || p.species) {
+          el.innerHTML = `
+            <div class="lp-name">${escHtml(p.name || '—')}</div>
+            <div class="lp-species">${escHtml(p.species || '')}</div>
+            ${p.url ? `<a href="${escHtml(p.url)}" target="_blank" rel="noopener"
+                style="font-size:10px;color:var(--accent);text-decoration:none;margin-top:4px;display:inline-block">
+                ↗ plant info</a>` : ''}`;
+        } else {
+          el.innerHTML = '<div class="lp-none">No plant set.</div>';
+        }
+      } catch (_) {}
+    }
+    loadLivePlant();
+
+    // ── Gallery ───────────────────────────────────────────────────────────
+    function escHtml(s) {
+      return String(s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function fmtDate(ms) {
+      if (!ms) return '—';
+      const d = new Date(ms);
+      return d.toLocaleDateString(undefined, { day:'numeric', month:'short', year:'numeric' })
+           + '  ' + d.toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' });
+    }
+
+    function fmtDuration(startMs, endMs) {
+      const sec = Math.round((endMs - startMs) / 1000);
+      if (sec < 60) return `${sec}s`;
+      const m = Math.floor(sec / 60), s = sec % 60;
+      return `${m}m ${s < 10 ? '0' : ''}${s}s`;
+    }
+
+    function fmtPoints(n) {
+      if (!n) return '—';
+      return n >= 1000 ? (n / 1000).toFixed(1) + 'k pts' : n + ' pts';
+    }
+
+    // Draw a tiny placeholder sparkline from session data
+    async function drawPlaceholder(canvas, sessionName) {
+      try {
+        const data = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}?maxPoints=200`).then(r => r.json());
+        const series = data.series?.mean || data.series?.deviation || [];
+        if (series.length < 2) return;
+
+        const dpr = window.devicePixelRatio || 1;
+        const w = canvas.offsetWidth || 240;
+        const h = canvas.offsetHeight || 135;
+        canvas.width  = Math.round(w * dpr);
+        canvas.height = Math.round(h * dpr);
+        const cx = canvas.getContext('2d');
+        cx.scale(dpr, dpr);
+
+        let lo = Infinity, hi = -Infinity;
+        for (const pt of series) { if (pt.y < lo) lo = pt.y; if (pt.y > hi) hi = pt.y; }
+        const span = hi - lo || 1;
+        const pad  = 4;
+        const iH   = h - pad * 2;
+        const xp   = i => (i / (series.length - 1)) * w;
+        const yp   = v => pad + iH - ((v - lo) / span) * iH;
+
+        cx.fillStyle = '#060e09';
+        cx.fillRect(0, 0, w, h);
+
+        cx.beginPath();
+        cx.moveTo(xp(0), h);
+        for (let i = 0; i < series.length; i++) cx.lineTo(xp(i), yp(series[i].y));
+        cx.lineTo(xp(series.length - 1), h);
+        cx.closePath();
+        cx.fillStyle = 'rgba(58,125,68,.30)';
+        cx.fill();
+
+        cx.beginPath();
+        for (let i = 0; i < series.length; i++) {
+          const px = xp(i), py = yp(series[i].y);
+          i === 0 ? cx.moveTo(px, py) : cx.lineTo(px, py);
+        }
+        cx.strokeStyle = 'rgba(106,184,122,.80)';
+        cx.lineWidth = 1.5;
+        cx.lineJoin = cx.lineCap = 'round';
+        cx.stroke();
+      } catch (_) {}
+    }
+
+    async function loadGallery() {
+      try {
+        const data = await fetch('/api/sessions').then(r => r.json());
+        const sessions = data.sessions || [];
+        const el = document.getElementById('gallery');
+
+        if (!sessions.length) {
+          el.innerHTML = '<div class="gallery-empty">No recordings found. Start recording in the Chart or Visualizer pages.</div>';
+          return;
+        }
+
+        const grid = document.createElement('div');
+        grid.className = 'card-grid';
+
+        for (const s of sessions) {
+          const plant = s.plant || {};
+          const hasSnap = s.hasSnapshot;
+          const safeName = s.session.replace(/[^a-zA-Z0-9_\-]/g, '_');
+
+          const card = document.createElement('div');
+          card.className = 'card';
+
+          const thumb = document.createElement('div');
+          thumb.className = 'card-thumb';
+
+          if (hasSnap) {
+            const img = document.createElement('img');
+            img.src = `/snapshots/${safeName}.png`;
+            img.alt = `Snapshot for ${s.session}`;
+            img.loading = 'lazy';
+            thumb.appendChild(img);
+          } else {
+            const c = document.createElement('canvas');
+            c.style.cssText = 'width:100%;height:100%;display:block';
+            thumb.appendChild(c);
+            // Draw placeholder lazily once card is visible
+            requestAnimationFrame(() => drawPlaceholder(c, s.session));
+          }
+
+          if (s.recording?.active || false) {
+            const badge = document.createElement('div');
+            badge.className = 'badge-rec';
+            badge.textContent = 'rec';
+            thumb.appendChild(badge);
+          }
+
+          const body = document.createElement('div');
+          body.className = 'card-body';
+
+          const nameHtml = plant.name
+            ? `<div class="card-plant-name">${escHtml(plant.name)}</div>`
+            : `<div class="card-plant-name" style="color:var(--muted);font-weight:400">${escHtml(s.session)}</div>`;
+
+          const speciesHtml = plant.species
+            ? `<div class="card-plant-row"><em>${escHtml(plant.species)}</em>${
+                plant.url ? `<a href="${escHtml(plant.url)}" target="_blank" rel="noopener" title="Plant info">↗</a>` : ''
+              }</div>`
+            : '';
+
+          body.innerHTML = `
+            ${nameHtml}
+            ${speciesHtml}
+            <hr class="card-divider">
+            <div class="card-date">${fmtDate(s.startMs)}</div>
+            <div class="card-meta">${fmtDuration(s.startMs, s.endMs)} · ${fmtPoints(s.points)}</div>
+            <div class="card-footer">
+              <a class="card-link" href="/?session=${encodeURIComponent(s.session)}">Open in chart</a>
+            </div>`;
+
+          card.appendChild(thumb);
+          card.appendChild(body);
+          grid.appendChild(card);
+        }
+
+        el.innerHTML = '';
+        el.appendChild(grid);
+      } catch (err) {
+        document.getElementById('gallery').innerHTML =
+          `<div class="gallery-empty">Could not load recordings: ${escHtml(err.message)}</div>`;
+      }
+    }
+
+    loadGallery();
+  </script>
+</body>
+</html>

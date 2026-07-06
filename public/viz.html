@@ -149,6 +149,43 @@
       transition: color .15s, border-color .15s;
     }
     .ap-btn:hover { color: var(--fg); border-color: var(--muted); }
+
+    /* ── Snapshot button (floating, bottom-left) ────────────────────────── */
+    #snapBtn {
+      position: fixed; bottom: 14px; left: 12px; z-index: 30;
+      padding: 5px 10px;
+      background: rgba(14,16,20,.88); border: 1px solid var(--border);
+      color: var(--muted); border-radius: 6px; cursor: pointer;
+      font: 11px/1.6 -apple-system,"Segoe UI",system-ui,sans-serif;
+      backdrop-filter: blur(6px);
+      transition: color .15s, border-color .15s;
+      display: none;
+    }
+    #snapBtn:hover { color: var(--fg); border-color: var(--muted); }
+    #snapBtn.visible { display: block; }
+
+    /* ── Toast ──────────────────────────────────────────────────────────── */
+    #toast {
+      position: fixed; bottom: 52px; left: 12px; z-index: 40;
+      padding: 6px 12px;
+      background: rgba(6,214,160,.18); border: 1px solid var(--ok);
+      color: var(--ok); border-radius: 6px;
+      font: 12px/1.5 -apple-system,"Segoe UI",system-ui,sans-serif;
+      backdrop-filter: blur(6px);
+      opacity: 0; transition: opacity .3s;
+      pointer-events: none;
+    }
+    #toast.show { opacity: 1; }
+
+    /* ── Plant profile inputs ────────────────────────────────────────────── */
+    .pp-input {
+      width: 100%; padding: 5px 8px;
+      background: #1a1f29; border: 1px solid var(--border);
+      color: var(--fg); border-radius: 6px;
+      font: 12px/1.5 -apple-system,"Segoe UI",system-ui,sans-serif;
+    }
+    .pp-input::placeholder { color: var(--muted); }
+    textarea.pp-input { resize: vertical; min-height: 44px; }
   </style>
 </head>
 <body>
@@ -392,11 +429,37 @@
       </div>
     </div>
 
+    <!-- Current Plant profile -->
     <div class="sb-section">
-      <a href="/" class="ap-btn" style="text-align:center;text-decoration:none;display:block">← Back to Chart</a>
+      <div class="sb-label">Current Plant</div>
+      <div class="ap-row">
+        <input type="text" class="pp-input" id="ppName" placeholder="Common name…">
+      </div>
+      <div class="ap-row">
+        <input type="text" class="pp-input" id="ppSpecies" placeholder="Species…" style="font-style:italic">
+      </div>
+      <div class="ap-row">
+        <input type="url" class="pp-input" id="ppUrl" placeholder="Info URL…">
+      </div>
+      <div class="ap-row">
+        <textarea class="pp-input" id="ppNotes" placeholder="Notes…" rows="2"></textarea>
+      </div>
+      <div class="ap-row">
+        <button class="ap-btn" id="ppSave">Save plant</button>
+      </div>
+    </div>
+
+    <div class="sb-section">
+      <div style="display:flex;gap:8px">
+        <a href="/dashboard" class="ap-btn" style="flex:1;text-align:center;text-decoration:none;display:block">Dashboard</a>
+        <a href="/" class="ap-btn" style="flex:1;text-align:center;text-decoration:none;display:block">Chart</a>
+      </div>
     </div>
 
   </nav>
+
+  <button id="snapBtn" title="Capture snapshot">⊡ Snapshot</button>
+  <div id="toast"></div>
 
   <canvas id="viz"></canvas>
 
@@ -851,6 +914,114 @@
         drawSpark(f);
       }
     }, 250);
+
+    // ── Embed mode ────────────────────────────────────────────────────────
+    if (new URLSearchParams(location.search).has('embed')) {
+      ['sidebarToggle', 'sidebar', 'readoutWrap'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+      });
+    }
+
+    // ── Current plant profile ─────────────────────────────────────────────
+    const PLANT_PROFILE_KEY = 'scion-plant-v1';
+    const ppName    = document.getElementById('ppName');
+    const ppSpecies = document.getElementById('ppSpecies');
+    const ppUrl     = document.getElementById('ppUrl');
+    const ppNotes   = document.getElementById('ppNotes');
+    const ppSave    = document.getElementById('ppSave');
+
+    async function loadPlantProfile() {
+      try {
+        const data = await fetch('/api/plant').then(r => r.json());
+        ppName.value    = data.name    || '';
+        ppSpecies.value = data.species || '';
+        ppUrl.value     = data.url     || '';
+        ppNotes.value   = data.notes   || '';
+      } catch {
+        try {
+          const p = JSON.parse(localStorage.getItem(PLANT_PROFILE_KEY) || '{}');
+          ppName.value = p.name || ''; ppSpecies.value = p.species || '';
+          ppUrl.value  = p.url  || ''; ppNotes.value   = p.notes   || '';
+        } catch (_) {}
+      }
+    }
+    loadPlantProfile();
+
+    ppSave.addEventListener('click', async () => {
+      const plant = {
+        name: ppName.value.trim(), species: ppSpecies.value.trim(),
+        url:  ppUrl.value.trim(),  notes:   ppNotes.value.trim(),
+      };
+      try {
+        localStorage.setItem(PLANT_PROFILE_KEY, JSON.stringify(plant));
+        await fetch('/api/plant', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(plant),
+        });
+        ppSave.textContent = 'Saved ✓';
+      } catch {
+        ppSave.textContent = 'Error';
+      }
+      setTimeout(() => { ppSave.textContent = 'Save plant'; }, 1600);
+    });
+
+    // ── Snapshot capture ──────────────────────────────────────────────────
+    const snapBtn = document.getElementById('snapBtn');
+    const toast   = document.getElementById('toast');
+    let   currentSession = null;
+
+    function showToast(msg) {
+      toast.textContent = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2500);
+    }
+
+    function captureSnapshot(sessionName) {
+      const dataUrl = canvas.toDataURL('image/png');
+      fetch(`/api/sessions/${encodeURIComponent(sessionName)}/snapshot`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dataUrl }),
+      }).then(r => r.json()).then(d => {
+        showToast(d.ok ? 'Snapshot saved ✓' : 'Snapshot failed');
+      }).catch(() => showToast('Snapshot failed'));
+    }
+
+    snapBtn.addEventListener('click', () => {
+      if (currentSession) captureSnapshot(currentSession);
+    });
+
+    // Secondary WebSocket — tracks recording state transitions for auto-capture
+    (function connectRecordingWs() {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const ws = new WebSocket(`${proto}://${location.host}/ws`);
+      let prevActive = false;
+
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'hello' && msg.recording) {
+            prevActive     = msg.recording.active;
+            currentSession = msg.recording.session || null;
+          } else if (msg.type === 'recording') {
+            const { active, session } = msg.recording;
+            if (prevActive && !active && session) {
+              // Recording just stopped — wait one frame then auto-capture
+              setTimeout(() => captureSnapshot(session), 200);
+            }
+            prevActive     = active;
+            currentSession = session || currentSession;
+          }
+          // Show the snap button whenever there is a known session
+          snapBtn.classList.toggle('visible', !!currentSession);
+        } catch (_) {}
+      };
+
+      ws.onclose = () => setTimeout(connectRecordingWs, 3000);
+      ws.onerror = () => ws.close();
+    })();
   </script>
 </body>
 </html>
