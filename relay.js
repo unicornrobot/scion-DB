@@ -27,8 +27,8 @@ if (!PUB_SECRET) {
 // ── HTTP / static files ──────────────────────────────────────────────────────
 const app = express();
 app.use(express.static(path.join(__dirname, 'public')));
-app.get('/viz', (_req, res) =>
-  res.sendFile(path.join(__dirname, 'public', 'viz.html')));
+app.get('/viz',       (_req, res) => res.sendFile(path.join(__dirname, 'public', 'viz.html')));
+app.get('/dashboard', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'dashboard.html')));
 
 app.get('/relay-status', (_req, res) => {
   res.json({
