@@ -29,6 +29,7 @@ class SacredSpiralVisualizer {
     this.sparkStyle  = 'points';
     this.pointStyle  = 'fill';   // 'fill' | 'stroke'
     this.showRings   = false;
+    this.sparkOpacity = 0.8;     // max alpha (0–1) for sparks and rings
 
     this._angle      = 0;
     this._trail      = null;
@@ -206,10 +207,8 @@ class SacredSpiralVisualizer {
 
       const tc = this._tc;
 
-      // Opacity maps directly to signal strength: near-zero at low variation,
-      // fully opaque at peak.  Use a power curve so mid-range values still
-      // read clearly rather than clustering near the bottom.
-      const alpha = Math.pow(normalised, 0.6) * 0.8;  // 0 → 0, peak → 0.8
+      // Opacity maps directly to signal strength, scaled by sparkOpacity.
+      const alpha = Math.pow(normalised, 0.6) * this.sparkOpacity;
 
       // Arc segment — colour, thickness and opacity all driven by intensity
       if (this.showRings) {
@@ -217,7 +216,7 @@ class SacredSpiralVisualizer {
         tc.moveTo(this._lastPt.x, this._lastPt.y);
         tc.lineTo(pos.x, pos.y);
         tc.strokeStyle = this._palColor(normalised, alpha);
-        tc.lineWidth   = 0.5 + normalised * 2.2;
+        tc.lineWidth   = 0.3 + normalised * 1.2;
         tc.lineJoin    = tc.lineCap = 'round';
         tc.stroke();
       }
@@ -232,12 +231,12 @@ class SacredSpiralVisualizer {
       const color     = this._palColor(normalised, alpha);
 
       if (this.sparkStyle === 'points') {
-        const r = 1.5 + normalised * 3.0;
+        const r = 1.0 + normalised * 2.0;
         tc.beginPath();
         tc.arc(tipX, tipY, r, 0, Math.PI * 2);
         if (this.pointStyle === 'stroke') {
           tc.strokeStyle = color;
-          tc.lineWidth   = 0.5 + normalised * 1.2;
+          tc.lineWidth   = 0.3 + normalised * 0.7;
           tc.stroke();
         } else {
           tc.fillStyle = color;
@@ -248,7 +247,7 @@ class SacredSpiralVisualizer {
         tc.moveTo(pos.x, pos.y);
         tc.lineTo(tipX, tipY);
         tc.strokeStyle = color;
-        tc.lineWidth   = 0.5 + normalised * 2.0;
+        tc.lineWidth   = 0.3 + normalised * 1.0;
         tc.lineCap     = 'round';
         tc.stroke();
       }

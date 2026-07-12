@@ -280,6 +280,13 @@
 
         <div class="ap-row">
           <div class="ap-label">
+            <span>Spark opacity</span>
+            <code id="apOpacityDisplay">0.80</code>
+          </div>
+          <input type="range" class="ap-range" id="apOpacity" min="0.02" max="1" step="0.01" value="0.8">
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
             <span>Spark scale</span>
             <code id="apSparkScaleDisplay">1.0</code>
           </div>
@@ -525,6 +532,8 @@
     const pointStyleRow       = document.getElementById('pointStyleRow');
     const apShowRings         = document.getElementById('apShowRings');
     const apSpark             = document.getElementById('apSpark');
+    const apOpacity           = document.getElementById('apOpacity');
+    const apOpacityDisplay    = document.getElementById('apOpacityDisplay');
     const apSparkScale        = document.getElementById('apSparkScale');
     const apSparkScaleDisplay = document.getElementById('apSparkScaleDisplay');
     const apReset             = document.getElementById('apReset');
@@ -534,14 +543,15 @@
     function saveSacredSettings() {
       try {
         localStorage.setItem(SACRED_LS_KEY, JSON.stringify({
-          watchField:  sacredViz.watchField,
-          sensitivity: sacredViz.sensitivity,
-          sparkField:  sacredViz.sparkField,
-          sparkScale:  sacredViz.sparkScale,
-          palette:     sacredViz.palette,
-          sparkStyle:  sacredViz.sparkStyle,
-          pointStyle:  sacredViz.pointStyle,
-          showRings:   sacredViz.showRings,
+          watchField:   sacredViz.watchField,
+          sensitivity:  sacredViz.sensitivity,
+          sparkField:   sacredViz.sparkField,
+          sparkScale:   sacredViz.sparkScale,
+          sparkOpacity: sacredViz.sparkOpacity,
+          palette:      sacredViz.palette,
+          sparkStyle:   sacredViz.sparkStyle,
+          pointStyle:   sacredViz.pointStyle,
+          showRings:    sacredViz.showRings,
         }));
       } catch (_) {}
     }
@@ -550,18 +560,20 @@
       let saved = {};
       try { saved = JSON.parse(localStorage.getItem(SACRED_LS_KEY)) || {}; } catch (_) {}
 
-      if (saved.watchField  != null) { apField.value      = saved.watchField;  sacredViz.watchField  = saved.watchField;  }
-      if (saved.sensitivity != null) { apRange.value      = saved.sensitivity; sacredViz.sensitivity = saved.sensitivity; }
-      if (saved.sparkField  != null) { apSpark.value      = saved.sparkField;  sacredViz.sparkField  = saved.sparkField;  }
-      if (saved.sparkScale  != null) { apSparkScale.value = saved.sparkScale;  sacredViz.sparkScale  = saved.sparkScale;  }
-      if (saved.palette     != null) { apPalette.value     = saved.palette;     sacredViz.palette     = saved.palette;     }
-      if (saved.sparkStyle  != null) { apSparkStyle.value  = saved.sparkStyle;  sacredViz.sparkStyle  = saved.sparkStyle;  }
-      if (saved.pointStyle  != null) { apPointStyle.value  = saved.pointStyle;  sacredViz.pointStyle  = saved.pointStyle;  }
-      if (saved.showRings   != null) { apShowRings.checked = saved.showRings;   sacredViz.showRings   = saved.showRings;   }
+      if (saved.watchField    != null) { apField.value       = saved.watchField;    sacredViz.watchField    = saved.watchField;    }
+      if (saved.sensitivity   != null) { apRange.value       = saved.sensitivity;   sacredViz.sensitivity   = saved.sensitivity;   }
+      if (saved.sparkField    != null) { apSpark.value       = saved.sparkField;    sacredViz.sparkField    = saved.sparkField;    }
+      if (saved.sparkScale    != null) { apSparkScale.value  = saved.sparkScale;    sacredViz.sparkScale    = saved.sparkScale;    }
+      if (saved.sparkOpacity  != null) { apOpacity.value     = saved.sparkOpacity;  sacredViz.sparkOpacity  = saved.sparkOpacity;  }
+      if (saved.palette       != null) { apPalette.value     = saved.palette;       sacredViz.palette       = saved.palette;       }
+      if (saved.sparkStyle    != null) { apSparkStyle.value  = saved.sparkStyle;    sacredViz.sparkStyle    = saved.sparkStyle;    }
+      if (saved.pointStyle    != null) { apPointStyle.value  = saved.pointStyle;    sacredViz.pointStyle    = saved.pointStyle;    }
+      if (saved.showRings     != null) { apShowRings.checked = saved.showRings;     sacredViz.showRings     = saved.showRings;     }
 
       // Sync display labels to whatever values ended up applied
       apValDisplay.textContent        = sacredViz.sensitivity.toFixed(4);
       apSparkScaleDisplay.textContent = sacredViz.sparkScale.toFixed(1);
+      apOpacityDisplay.textContent    = sacredViz.sparkOpacity.toFixed(2);
     }
 
     loadSacredSettings();
@@ -601,6 +613,13 @@
 
     apShowRings.addEventListener('change', () => {
       sacredViz.showRings = apShowRings.checked;
+      saveSacredSettings();
+    });
+
+    apOpacity.addEventListener('input', () => {
+      const v = parseFloat(apOpacity.value);
+      apOpacityDisplay.textContent = v.toFixed(2);
+      sacredViz.sparkOpacity = v;
       saveSacredSettings();
     });
 
