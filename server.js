@@ -359,6 +359,65 @@ app.post('/api/record/start', (req, res) => {
   res.json({ ok: true, recording });
 });
 
+app.delete('/api/sessions/:name', async (req, res) => {
+  const name = req.params.name;
+
+  // 1. Delete all InfluxDB points tagged with this session
+  if (INFLUX_TOKEN && INFLUX_ORG) {
+    try {
+      const url = new URL(`${INFLUX_URL}/api/v2/delete`);
+      url.searchParams.set('org',    INFLUX_ORG);
+      url.searchParams.set('bucket', INFLUX_BUCKET);
+
+      const body = JSON.stringify({
+        start:     '1970-01-01T00:00:00Z',
+        stop:      '2099-01-01T00:00:00Z',
+        predicate: `session="${fluxStr(name)}"`,
+      });
+
+      const mod = url.protocol === 'https:' ? require('https') : require('http');
+      await new Promise((resolve, reject) => {
+        const r = mod.request(url, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Token ${INFLUX_TOKEN}`,
+            'Content-Type':  'application/json',
+            'Content-Length': Buffer.byteLength(body),
+          },
+        }, (resp) => {
+          resp.resume(); // drain
+          if (resp.statusCode >= 400) {
+            reject(new Error(`InfluxDB delete returned ${resp.statusCode}`));
+          } else {
+            resolve();
+          }
+        });
+        r.on('error', reject);
+        r.write(body);
+        r.end();
+      });
+    } catch (err) {
+      console.error('[influx] delete error:', err.message);
+      return res.status(500).json({ error: `InfluxDB delete failed: ${err.message}` });
+    }
+  }
+
+  // 2. Remove from meta.json
+  try {
+    const meta = readJSON(META_FILE, {});
+    delete meta[name];
+    writeJSON(META_FILE, meta);
+  } catch (_) {}
+
+  // 3. Remove snapshot if present
+  const safe = name.replace(/[^a-zA-Z0-9_\-]/g, '_');
+  const snapFile = path.join(SNAP_DIR, `${safe}.png`);
+  try { fs.unlinkSync(snapFile); } catch (_) {}
+
+  console.log(`[record] deleted session=${name}`);
+  res.json({ ok: true });
+});
+
 app.post('/api/record/stop', async (_req, res) => {
   if (!recording.active) {
     return res.status(409).json({ error: 'not recording', recording });

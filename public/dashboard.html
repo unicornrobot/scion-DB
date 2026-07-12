@@ -183,15 +183,22 @@
       font-size: 11px; color: var(--muted); font-family: var(--mono);
     }
     .card-date { font-size: 11px; color: var(--fg); margin-bottom: 2px; }
-    .card-footer { margin-top: auto; padding-top: 8px; }
+    .card-footer { margin-top: auto; padding-top: 8px; display: flex; gap: 6px; }
     .card-link {
-      display: block; text-align: center;
+      flex: 1; display: block; text-align: center;
       padding: 6px 10px; border-radius: 6px;
       border: 1px solid var(--border-l); color: var(--muted);
       font-size: 11px; text-decoration: none;
       transition: color .15s, border-color .15s;
     }
     .card-link:hover { color: var(--fg); border-color: var(--plant); }
+    .card-del {
+      padding: 6px 10px; border-radius: 6px;
+      border: 1px solid var(--border-l); color: var(--muted);
+      font-size: 11px; cursor: pointer; background: none;
+      transition: color .15s, border-color .15s;
+    }
+    .card-del:hover { color: #ef476f; border-color: #ef476f; }
 
     .badge-rec {
       position: absolute; top: 6px; right: 6px;
@@ -544,7 +551,25 @@
             <div class="card-meta">${fmtDuration(s.startMs, s.endMs)} · ${fmtPoints(s.points)}</div>
             <div class="card-footer">
               <a class="card-link" href="/?session=${encodeURIComponent(s.session)}">Open in chart</a>
+              <button class="card-del" title="Delete recording">✕</button>
             </div>`;
+
+          body.querySelector('.card-del').addEventListener('click', async () => {
+            if (!confirm(`Delete recording "${s.session}"?\n\nThis removes all data from InfluxDB and cannot be undone.`)) return;
+            try {
+              const r = await fetch(`/api/sessions/${encodeURIComponent(s.session)}`, { method: 'DELETE' });
+              const d = await r.json();
+              if (d.ok) {
+                card.style.transition = 'opacity .3s';
+                card.style.opacity = '0';
+                setTimeout(() => card.remove(), 320);
+              } else {
+                alert(`Delete failed: ${d.error || 'unknown error'}`);
+              }
+            } catch (err) {
+              alert(`Delete failed: ${err.message}`);
+            }
+          });
 
           card.appendChild(thumb);
           card.appendChild(body);
