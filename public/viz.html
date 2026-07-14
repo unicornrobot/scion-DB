@@ -150,6 +150,19 @@
     }
     .ap-btn:hover { color: var(--fg); border-color: var(--muted); }
 
+    /* ── Fullscreen button (floating, top-right) ────────────────────────── */
+    #fsBtn {
+      position: fixed; top: 12px; right: 12px; z-index: 30;
+      width: 34px; height: 34px;
+      background: rgba(14,16,20,.88); border: 1px solid var(--border);
+      color: var(--muted); border-radius: 8px; cursor: pointer;
+      font-size: 17px; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      backdrop-filter: blur(8px);
+      transition: color .15s, border-color .15s;
+    }
+    #fsBtn:hover { color: var(--fg); border-color: var(--muted); }
+
     /* ── Snapshot button (floating, bottom-left) ────────────────────────── */
     #snapBtn {
       position: fixed; bottom: 14px; left: 12px; z-index: 30;
@@ -211,6 +224,8 @@
 <body>
   <!-- Always-visible sidebar toggle -->
   <button id="sidebarToggle" title="Toggle sidebar">☰</button>
+  <!-- Fullscreen toggle -->
+  <button id="fsBtn" title="Fullscreen (F)">⛶</button>
 
   <!-- Sidebar -->
   <nav id="sidebar">
@@ -638,15 +653,29 @@
 
     function setViz(name) {
       engine.activate(name);
+<<<<<<< HEAD
       sacredSettings.style.display   = name === 'sacred'   ? '' : 'none';
       organicSettings.style.display  = name === 'organic'  ? '' : 'none';
       plantSettings.style.display    = name === 'plant'    ? '' : 'none';
       tapestrySettings.style.display = name === 'tapestry' ? '' : 'none';
+=======
+      sacredSettings.style.display  = name === 'sacred'  ? '' : 'none';
+      organicSettings.style.display = name === 'organic' ? '' : 'none';
+      plantSettings.style.display   = name === 'plant'   ? '' : 'none';
+      localStorage.setItem('scion-active-viz', name);
+>>>>>>> c491713 (fullscreen button)
     }
 
     document.getElementById('vizPicker').addEventListener('change', (e) => {
       setViz(e.target.value);
     });
+
+    // Restore saved viz on load
+    const savedViz = localStorage.getItem('scion-active-viz');
+    if (savedViz && document.querySelector(`#vizPicker option[value="${savedViz}"]`)) {
+      document.getElementById('vizPicker').value = savedViz;
+      setViz(savedViz);
+    }
 
     // ── Admin panel wiring ────────────────────────────────────────────────
     const apField             = document.getElementById('apField');
@@ -1522,6 +1551,48 @@
       ws.onclose = () => setTimeout(connectRecordingWs, 3000);
       ws.onerror = () => ws.close();
     })();
+
+    // ── Fullscreen ────────────────────────────────────────────────────────
+    const fsBtn = document.getElementById('fsBtn');
+    const fsEl  = document.documentElement;
+
+    // Vendor-prefixed helpers (iOS Safari uses webkit prefix)
+    const _requestFS = (fsEl.requestFullscreen || fsEl.webkitRequestFullscreen ||
+                        fsEl.mozRequestFullScreen || fsEl.msRequestFullscreen);
+    const _exitFS    = (document.exitFullscreen || document.webkitExitFullscreen ||
+                        document.mozCancelFullScreen || document.msExitFullscreen);
+    const _isFS      = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+    const fsSupported = !!_requestFS;
+
+    function applyFsIcon() {
+      fsBtn.textContent = _isFS() ? '⊡' : '⛶';
+      fsBtn.title       = _isFS() ? 'Exit fullscreen (F / Esc)' : 'Fullscreen (F)';
+    }
+
+    function toggleFullscreen() {
+      if (!fsSupported) return;
+      if (_isFS()) {
+        _exitFS.call(document);
+      } else {
+        _requestFS.call(fsEl).catch(() => {});
+      }
+    }
+
+    fsBtn.addEventListener('click', toggleFullscreen);
+
+    ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange'].forEach(ev =>
+      document.addEventListener(ev, applyFsIcon));
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'F' || e.key === 'f') {
+        if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'SELECT') {
+          toggleFullscreen();
+        }
+      }
+    });
+
+    // Hide the button entirely if the API isn't available (e.g. older iOS)
+    if (!fsSupported) fsBtn.style.display = 'none';
   </script>
 </body>
 </html>

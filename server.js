@@ -578,8 +578,19 @@ udp.open();
 // Start HTTP server + graceful shutdown.
 // ---------------------------------------------------------------------------
 server.listen(HTTP_PORT, () => {
-  console.log(`[http] listening on http://127.0.0.1:${HTTP_PORT}`);
-  console.log(`[http] open the URL above to view the live chart`);
+  // Print every non-loopback IPv4 so the phone URL is immediately visible.
+  const { networkInterfaces } = require('os');
+  const addrs = Object.values(networkInterfaces())
+    .flat()
+    .filter(i => i.family === 'IPv4' && !i.internal)
+    .map(i => `  http://${i.address}:${HTTP_PORT}`);
+  console.log(`[http] listening on port ${HTTP_PORT}`);
+  if (addrs.length) {
+    console.log('[http] open on this device or from your phone:');
+    addrs.forEach(a => console.log(a));
+  } else {
+    console.log(`[http] http://127.0.0.1:${HTTP_PORT} (no LAN interfaces found yet)`);
+  }
   if (!INFLUX_TOKEN || !INFLUX_ORG) {
     console.warn(
       '[influx] not configured — recording is disabled until INFLUX_TOKEN ' +
