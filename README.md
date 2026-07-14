@@ -44,10 +44,11 @@ Pocket Scion (UDP/OSC)
 ## Features
 
 - **Live chart** — rolling time-series of all six fields with toggleable series, spike filtering, and configurable time window
-- **Three live visualisers** — switchable from the sidebar:
+- **Four live visualisers** — switchable from the sidebar:
   - **Spiral** — change-driven Archimedean spiral with radial spark lines scaled to data amplitude
   - **Plant Signal** — a generative curved plant with electrical action-potential pulses travelling from the root out through every branch and leaf
   - **Mycelium** — a Physarum (slime-mould) agent simulation that self-organises into glowing flow networks
+  - **Tapestry** — a data loom: six coloured threads weave downward row by row, each thread's horizontal position tracking its field's value relative to its recent range
 - **Session recording** — writes to InfluxDB v2 with per-session tagging; playback in the chart view
 - **Cloud relay** — thin WebSocket fan-out server; deploy once to Railway, share a URL with anyone
 
@@ -282,6 +283,22 @@ A multi-agent Physarum (slime-mould) chemotaxis simulation. Agents deposit a che
 | Decay | Per-frame trail fade rate — low accumulates, high stays ephemeral |
 | Agents | Agent count (Low 400 / Medium 1200 / High 2400) |
 | Clear & reset | Wipe the trail and re-scatter agents |
+
+### Tapestry
+
+A data loom. Time advances downward row by row like a loom's weft; each of the six fields is a coloured thread whose horizontal position is its value normalised against its own recent min–max range, so threads wander left and right as the signal moves. Weaving only advances while the watched field is active — the loom freezes when the signal is still. When the fabric reaches the bottom it wraps to the top and layers over the old rows without clearing, building up a dense woven texture over a session.
+
+| Setting | Description |
+|---|---|
+| Watch field | Which field gates weave advancement |
+| Sensitivity | Normalised activity threshold for weaving |
+| Weave speed | Row advance rate multiplier |
+| Row height | Pixels per weave row — small is dense fabric, large is open weave |
+| Palette | Thread colour set (Loom / Biolum / Prism / Ember) |
+| Thread opacity | Maximum alpha of thread strokes |
+| Show weft texture | Faint horizontal line per row for a fabric feel |
+| Threads | Toggle each of the six field threads individually |
+| Clear fabric | Wipe the canvas and restart from the top |
 
 ---
 

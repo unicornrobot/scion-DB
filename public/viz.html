@@ -209,6 +209,7 @@
         <option value="plant">Plant Signal</option>
         <option value="organic">Mycelium</option>
         <option value="sacred" selected>Spiral</option>
+        <option value="tapestry">Tapestry</option>
       </select>
     </div>
 
@@ -436,6 +437,90 @@
       </div>
     </div>
 
+    <!-- Tapestry (loom) settings — shown only when that viz is active -->
+    <div id="tapestrySettings" style="display:none">
+      <div class="sb-section">
+        <div class="sb-label">Signal</div>
+        <div class="ap-row">
+          <div class="ap-label"><span>Watch field</span></div>
+          <select class="ap-select" id="twField">
+            <option value="mean">mean</option>
+            <option value="min">min</option>
+            <option value="max">max</option>
+            <option value="delta">delta</option>
+            <option value="variance">variance</option>
+            <option value="deviation" selected>deviation</option>
+          </select>
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Sensitivity</span>
+            <code id="twSensDisplay">0.30</code>
+          </div>
+          <input type="range" class="ap-range" id="twSens" min="0" max="1" step="0.01" value="0.3">
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Activity</span>
+            <span class="ap-current" id="twCurrent">—</span>
+          </div>
+          <div class="ap-bar-wrap">
+            <div class="ap-bar-fill" id="twBarFill"></div>
+            <div class="ap-bar-thresh" id="twBarThresh"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-label">Weave</div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Weave speed</span>
+            <code id="twSpeedDisplay">1.0</code>
+          </div>
+          <input type="range" class="ap-range" id="twSpeed" min="0.2" max="4.0" step="0.1" value="1.0">
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Row height</span>
+            <code id="twRowDisplay">3</code>
+          </div>
+          <input type="range" class="ap-range" id="twRow" min="2" max="8" step="1" value="3">
+        </div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-label">Appearance</div>
+        <div class="ap-row">
+          <div class="ap-label"><span>Palette</span></div>
+          <select class="ap-select" id="twPalette">
+            <option value="loom" selected>Loom   — dyed wool</option>
+            <option value="biolum"        >Biolum — deep sea</option>
+            <option value="prism"         >Prism  — chart colours</option>
+            <option value="ember"         >Ember  — fire tones</option>
+          </select>
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Thread opacity</span>
+            <code id="twOpacityDisplay">0.70</code>
+          </div>
+          <input type="range" class="ap-range" id="twOpacity" min="0.05" max="1" step="0.01" value="0.7">
+        </div>
+        <div class="ap-row" style="display:flex;align-items:center;gap:8px">
+          <input type="checkbox" id="twShowWeft" checked style="accent-color:var(--accent);width:14px;height:14px;cursor:pointer;flex-shrink:0">
+          <label for="twShowWeft" style="font-size:11px;color:var(--muted);cursor:pointer">Show weft texture</label>
+        </div>
+        <div class="ap-row">
+          <div class="ap-label"><span>Threads</span></div>
+          <div id="twThreads" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 8px"></div>
+        </div>
+        <div class="ap-row">
+          <button class="ap-btn" id="twReset">Clear fabric</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Current Plant profile -->
     <div class="sb-section">
       <div class="sb-label">Current Plant</div>
@@ -486,6 +571,7 @@
   <script src="/js/visualizers/physarum.js"></script>
   <script src="/js/visualizers/plant-signal.js"></script>
   <script src="/js/visualizers/sacred-spiral.js"></script>
+  <script src="/js/visualizers/tapestry.js"></script>
   <script>
     // ── Boot ──────────────────────────────────────────────────────────────
     const canvas      = document.getElementById('viz');
@@ -493,16 +579,19 @@
     const sacredViz   = new SacredSpiralVisualizer();
     const physarumViz = new PhysarumVisualizer();
     const plantViz    = new PlantSignalVisualizer();
+    const tapestryViz = new TapestryVisualizer();
 
-    engine.register('plant',   plantViz);
-    engine.register('organic', physarumViz);
-    engine.register('sacred',  sacredViz);
+    engine.register('plant',    plantViz);
+    engine.register('organic',  physarumViz);
+    engine.register('sacred',   sacredViz);
+    engine.register('tapestry', tapestryViz);
     engine.activate('sacred');
 
-    const sidebar         = document.getElementById('sidebar');
-    const sacredSettings  = document.getElementById('sacredSettings');
-    const organicSettings = document.getElementById('organicSettings');
-    const plantSettings   = document.getElementById('plantSettings');
+    const sidebar          = document.getElementById('sidebar');
+    const sacredSettings   = document.getElementById('sacredSettings');
+    const organicSettings  = document.getElementById('organicSettings');
+    const plantSettings    = document.getElementById('plantSettings');
+    const tapestrySettings = document.getElementById('tapestrySettings');
 
     document.getElementById('sidebarToggle').addEventListener('click', () => {
       sidebar.classList.toggle('open');
@@ -510,9 +599,10 @@
 
     function setViz(name) {
       engine.activate(name);
-      sacredSettings.style.display  = name === 'sacred'  ? '' : 'none';
-      organicSettings.style.display = name === 'organic' ? '' : 'none';
-      plantSettings.style.display   = name === 'plant'   ? '' : 'none';
+      sacredSettings.style.display   = name === 'sacred'   ? '' : 'none';
+      organicSettings.style.display  = name === 'organic'  ? '' : 'none';
+      plantSettings.style.display    = name === 'plant'    ? '' : 'none';
+      tapestrySettings.style.display = name === 'tapestry' ? '' : 'none';
     }
 
     document.getElementById('vizPicker').addEventListener('change', (e) => {
@@ -824,6 +914,144 @@
       plBarFill.style.width  = Math.min(norm * 100, 100) + '%';
       plBarFill.classList.toggle('over', over);
       plBarThresh.style.left = Math.min(sens * 100, 100) + '%';
+    }, 100);
+
+    // ── Tapestry panel wiring ─────────────────────────────────────────────
+    const twField          = document.getElementById('twField');
+    const twSens           = document.getElementById('twSens');
+    const twSensDisplay    = document.getElementById('twSensDisplay');
+    const twCurrent        = document.getElementById('twCurrent');
+    const twBarFill        = document.getElementById('twBarFill');
+    const twBarThresh      = document.getElementById('twBarThresh');
+    const twSpeed          = document.getElementById('twSpeed');
+    const twSpeedDisplay   = document.getElementById('twSpeedDisplay');
+    const twRow            = document.getElementById('twRow');
+    const twRowDisplay     = document.getElementById('twRowDisplay');
+    const twPalette        = document.getElementById('twPalette');
+    const twOpacity        = document.getElementById('twOpacity');
+    const twOpacityDisplay = document.getElementById('twOpacityDisplay');
+    const twShowWeft       = document.getElementById('twShowWeft');
+    const twThreads        = document.getElementById('twThreads');
+    const twReset          = document.getElementById('twReset');
+
+    const TAPESTRY_LS_KEY = 'scion-tapestry-settings-v1';
+
+    // Build the six thread toggle checkboxes
+    const twThreadChecks = {};
+    for (const f of TAPESTRY_FIELDS) {
+      const wrap = document.createElement('label');
+      wrap.style.cssText = 'display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);cursor:pointer';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = true;
+      cb.style.cssText = 'accent-color:var(--accent);width:12px;height:12px;cursor:pointer;flex-shrink:0';
+      cb.addEventListener('change', () => {
+        tapestryViz.threads[f] = cb.checked;
+        saveTapestrySettings();
+      });
+      wrap.appendChild(cb);
+      wrap.appendChild(document.createTextNode(f));
+      twThreads.appendChild(wrap);
+      twThreadChecks[f] = cb;
+    }
+
+    function saveTapestrySettings() {
+      try {
+        localStorage.setItem(TAPESTRY_LS_KEY, JSON.stringify({
+          watchField:    tapestryViz.watchField,
+          sensitivity:   tapestryViz.sensitivity,
+          weaveSpeed:    tapestryViz.weaveSpeed,
+          rowHeight:     tapestryViz.rowHeight,
+          palette:       tapestryViz.palette,
+          threadOpacity: tapestryViz.threadOpacity,
+          showWeft:      tapestryViz.showWeft,
+          threads:       tapestryViz.threads,
+        }));
+      } catch (_) {}
+    }
+
+    function loadTapestrySettings() {
+      let saved = {};
+      try { saved = JSON.parse(localStorage.getItem(TAPESTRY_LS_KEY)) || {}; } catch (_) {}
+      if (saved.watchField    != null) { twField.value    = saved.watchField;    tapestryViz.watchField    = saved.watchField;    }
+      if (saved.sensitivity   != null) { twSens.value     = saved.sensitivity;   tapestryViz.sensitivity   = saved.sensitivity;   }
+      if (saved.weaveSpeed    != null) { twSpeed.value    = saved.weaveSpeed;    tapestryViz.weaveSpeed    = saved.weaveSpeed;    }
+      if (saved.rowHeight     != null) { twRow.value      = saved.rowHeight;     tapestryViz.rowHeight     = saved.rowHeight;     }
+      if (saved.palette       != null) { twPalette.value  = saved.palette;       tapestryViz.palette       = saved.palette;       }
+      if (saved.threadOpacity != null) { twOpacity.value  = saved.threadOpacity; tapestryViz.threadOpacity = saved.threadOpacity; }
+      if (saved.showWeft      != null) { twShowWeft.checked = saved.showWeft;    tapestryViz.showWeft      = saved.showWeft;      }
+      if (saved.threads) {
+        for (const f of TAPESTRY_FIELDS) {
+          if (saved.threads[f] != null) {
+            tapestryViz.threads[f] = saved.threads[f];
+            twThreadChecks[f].checked = saved.threads[f];
+          }
+        }
+      }
+      twSensDisplay.textContent    = tapestryViz.sensitivity.toFixed(2);
+      twSpeedDisplay.textContent   = tapestryViz.weaveSpeed.toFixed(1);
+      twRowDisplay.textContent     = String(tapestryViz.rowHeight);
+      twOpacityDisplay.textContent = tapestryViz.threadOpacity.toFixed(2);
+    }
+
+    loadTapestrySettings();
+
+    twField.addEventListener('change', () => {
+      tapestryViz.watchField = twField.value;
+      saveTapestrySettings();
+    });
+
+    twSens.addEventListener('input', () => {
+      const v = parseFloat(twSens.value);
+      twSensDisplay.textContent = v.toFixed(2);
+      tapestryViz.sensitivity = v;
+      saveTapestrySettings();
+    });
+
+    twSpeed.addEventListener('input', () => {
+      const v = parseFloat(twSpeed.value);
+      twSpeedDisplay.textContent = v.toFixed(1);
+      tapestryViz.weaveSpeed = v;
+      saveTapestrySettings();
+    });
+
+    twRow.addEventListener('input', () => {
+      const v = parseInt(twRow.value, 10);
+      twRowDisplay.textContent = String(v);
+      tapestryViz.rowHeight = v;
+      saveTapestrySettings();
+    });
+
+    twPalette.addEventListener('change', () => {
+      tapestryViz.palette = twPalette.value;
+      saveTapestrySettings();
+    });
+
+    twOpacity.addEventListener('input', () => {
+      const v = parseFloat(twOpacity.value);
+      twOpacityDisplay.textContent = v.toFixed(2);
+      tapestryViz.threadOpacity = v;
+      saveTapestrySettings();
+    });
+
+    twShowWeft.addEventListener('change', () => {
+      tapestryViz.showWeft = twShowWeft.checked;
+      saveTapestrySettings();
+    });
+
+    twReset.addEventListener('click', () => tapestryViz.clearTrail());
+
+    // Live activity bar for Tapestry
+    setInterval(() => {
+      if (tapestrySettings.style.display === 'none') return;
+      const norm = tapestryViz._normChange || 0;
+      const sens = tapestryViz.sensitivity;
+      const over = norm > sens;
+      twCurrent.textContent = norm.toFixed(2);
+      twCurrent.classList.toggle('over', over);
+      twBarFill.style.width  = Math.min(norm * 100, 100) + '%';
+      twBarFill.classList.toggle('over', over);
+      twBarThresh.style.left = Math.min(sens * 100, 100) + '%';
     }, 100);
 
     engine.onConnectionChange = (live) => {
