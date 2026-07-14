@@ -46,10 +46,14 @@ Pocket Scion (UDP/OSC)
 - **Live chart** — rolling time-series of all six fields with toggleable series, spike filtering, and configurable time window
 - **Four live visualisers** — switchable from the sidebar:
   - **Spiral** — change-driven Archimedean spiral with radial spark lines scaled to data amplitude
-  - **Plant Signal** — a generative curved plant with electrical action-potential pulses travelling from the root out through every branch and leaf
+  - **Plant Signal** — a generative curved plant with electrical action-potential pulses travelling from the root out through every branch fand leaf
   - **Mycelium** — a Physarum (slime-mould) agent simulation that self-organises into glowing flow networks
+<<<<<<< HEAD
   - **Tapestry** — a data loom: six coloured threads weave downward row by row, each thread's horizontal position tracking its field's value relative to its recent range
 - **Session recording** — writes to InfluxDB v2 with per-session tagging; playback in the chart view
+=======
+c- **Session recording** — writes to InfluxDB v2 with per-session tagging; playback in the chart view
+>>>>>>> 138c86a (fullscreens)
 - **Cloud relay** — thin WebSocket fan-out server; deploy once to Railway, share a URL with anyone
 
 ---
