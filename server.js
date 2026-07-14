@@ -441,6 +441,23 @@ const wss = new WebSocketServer({ server, path: '/ws' });
 
 wss.on('connection', (ws) => {
   ws.send(JSON.stringify({ type: 'hello', latest, recording }));
+
+  ws.on('message', (data, isBinary) => {
+    if (isBinary) {
+      broadcastAudio(data, ws);
+    } else {
+      try {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === 'audioStart' || msg.type === 'audioStop') {
+          const str = data.toString();
+          for (const client of wss.clients) {
+            if (client !== ws && client.readyState === 1) client.send(str);
+          }
+          if (relayWs && relayWs.readyState === 1) relayWs.send(str);
+        }
+      } catch (_) {}
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -487,6 +504,13 @@ function broadcast(payload) {
     if (client.readyState === 1) client.send(msg);
   }
   if (relayWs && relayWs.readyState === 1) relayWs.send(msg);
+}
+
+function broadcastAudio(data, senderWs) {
+  for (const client of wss.clients) {
+    if (client !== senderWs && client.readyState === 1) client.send(data, { binary: true });
+  }
+  if (relayWs && relayWs.readyState === 1) relayWs.send(data, { binary: true });
 }
 
 // ---------------------------------------------------------------------------

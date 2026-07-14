@@ -75,14 +75,19 @@ wss.on('connection', (ws, req) => {
     publisherWs        = ws;
     console.log('[relay] publisher connected');
 
-    ws.on('message', (data) => {
+    ws.on('message', (data, isBinary) => {
+      if (isBinary) {
+        for (const v of viewers) {
+          if (v.readyState === WebSocket.OPEN) v.send(data, { binary: true });
+        }
+        return;
+      }
       try {
         const msg = JSON.parse(data);
         if (msg.type === 'sample' && Number.isFinite(msg.value)) {
           latest[msg.field] = msg.value;
         }
       } catch (_) {}
-
       const str = data.toString();
       for (const v of viewers) {
         if (v.readyState === WebSocket.OPEN) v.send(str);

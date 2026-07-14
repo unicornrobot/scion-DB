@@ -177,6 +177,26 @@
     }
     #toast.show { opacity: 1; }
 
+    /* ── Audio stream UI ─────────────────────────────────────────────────── */
+    #audioPlayer {
+      position: fixed; bottom: 44px; left: 12px; z-index: 30;
+      display: flex; align-items: center; gap: 8px;
+      background: rgba(14,16,20,.88); border: 1px solid var(--border);
+      border-radius: 6px; padding: 4px 10px 4px 8px;
+      font: 11px/1.6 -apple-system,"Segoe UI",system-ui,sans-serif;
+      backdrop-filter: blur(6px);
+    }
+    .audio-live-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: var(--ok); flex-shrink: 0;
+      animation: audio-pulse 1.2s ease-in-out infinite;
+    }
+    @keyframes audio-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    #audioVol { width: 68px; accent-color: var(--ok); cursor: pointer; }
+    #audioPlayBtn {
+      background: #1a1f29; border: 1px solid var(--border); color: var(--fg);
+      border-radius: 4px; padding: 1px 8px; font-size: 11px; cursor: pointer;
+    }
+
     /* ── Plant profile inputs ────────────────────────────────────────────── */
     .pp-input {
       width: 100%; padding: 5px 8px;
@@ -521,6 +541,18 @@
       </div>
     </div>
 
+    <!-- Audio stream -->
+    <div class="sb-section" id="audioSection">
+      <div class="sb-label">Audio stream</div>
+      <div class="ap-row">
+        <button class="ap-btn" id="audioToggle">⬤ Stream audio</button>
+      </div>
+      <div class="ap-row" id="audioDeviceRow" style="display:none">
+        <div class="ap-label"><span>Input</span></div>
+        <select class="ap-select" id="audioDeviceSelect"></select>
+      </div>
+    </div>
+
     <!-- Current Plant profile -->
     <div class="sb-section">
       <div class="sb-label">Current Plant</div>
@@ -552,6 +584,13 @@
 
   <button id="snapBtn" title="Capture snapshot">⊡ Snapshot</button>
   <div id="toast"></div>
+
+  <div id="audioPlayer" style="display:none">
+    <span class="audio-live-dot"></span>
+    <span style="color:var(--muted)">audio live</span>
+    <button id="audioPlayBtn" style="display:none">▶ Play</button>
+    <input type="range" id="audioVol" min="0" max="1" step="0.05" value="0.8" title="Volume">
+  </div>
 
   <canvas id="viz"></canvas>
 
@@ -1164,7 +1203,7 @@
 
     // ── Embed mode ────────────────────────────────────────────────────────
     if (new URLSearchParams(location.search).has('embed')) {
-      ['sidebarToggle', 'sidebar', 'readoutWrap'].forEach(id => {
+      ['sidebarToggle', 'sidebar', 'readoutWrap', 'audioPlayer'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
       });
@@ -1213,6 +1252,220 @@
       }
       setTimeout(() => { ppSave.textContent = 'Save plant'; }, 1600);
     });
+
+    // ── Audio stream ──────────────────────────────────────────────────────
+    //
+    // Publisher side: getUserMedia → MediaRecorder → binary WS chunks
+    // Viewer side:    binary chunks → MediaSource → <Audio> playback
+    //
+    // A dedicated WS carries both: text audioStart/audioStop control messages
+    // travel the same path as sample data (server.js → relay.js → viewers).
+    // Binary audio chunks go via broadcastAudio on the server, which skips the
+    // sender and also forwards to relay.js → viewers.
+
+    let audioWs        = null;
+    let audioStream    = null;
+    let mediaRecorder  = null;
+    let isStreaming    = false;
+
+    // Playback state
+    let isAudioActive = false;
+    let audioEl       = null;
+    let audioMS       = null;  // MediaSource
+    let audioBuf      = null;  // SourceBuffer
+    let audioQueue    = [];    // chunks arriving before SourceBuffer is ready
+
+    function connectAudioWs() {
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const ws = new WebSocket(`${proto}://${location.host}/ws`);
+      ws.binaryType = 'arraybuffer';
+
+      ws.onmessage = (e) => {
+        if (e.data instanceof ArrayBuffer) {
+          handleAudioChunk(e.data);
+          return;
+        }
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'audioStart') {
+            isAudioActive = true;
+            audioQueue    = [];
+            setupAudioPlayback(msg.mimeType || 'audio/webm;codecs=opus');
+            document.getElementById('audioPlayer').style.display = 'flex';
+          } else if (msg.type === 'audioStop') {
+            isAudioActive = false;
+            document.getElementById('audioPlayer').style.display = 'none';
+            if (audioMS && audioMS.readyState === 'open') {
+              try { audioMS.endOfStream(); } catch (_) {}
+            }
+          }
+        } catch (_) {}
+      };
+
+      ws.onclose = () => {
+        if (isStreaming) stopAudioStream();
+        setTimeout(connectAudioWs, 3000);
+      };
+      ws.onerror  = () => ws.close();
+      audioWs = ws;
+    }
+
+    // ── Viewer: MediaSource playback ──────────────────────────────────────
+
+    function setupAudioPlayback(mimeType) {
+      if (!window.MediaSource || !MediaSource.isTypeSupported(mimeType)) {
+        console.warn('[audio] playback unsupported for', mimeType);
+        return;
+      }
+      if (audioEl) {
+        audioEl.pause();
+        try { URL.revokeObjectURL(audioEl.src); } catch (_) {}
+      }
+      audioBuf  = null;
+      audioQueue = [];
+
+      audioEl       = new Audio();
+      audioEl.volume = parseFloat(document.getElementById('audioVol').value);
+      audioMS       = new MediaSource();
+      audioEl.src   = URL.createObjectURL(audioMS);
+
+      audioMS.addEventListener('sourceopen', () => {
+        try {
+          audioBuf = audioMS.addSourceBuffer(mimeType);
+          audioBuf.mode = 'sequence';
+          audioBuf.addEventListener('updateend', () => {
+            if (audioQueue.length > 0 && !audioBuf.updating) {
+              try { audioBuf.appendBuffer(audioQueue.shift()); } catch (_) {}
+            }
+            // Trim buffer to avoid unbounded growth
+            if (audioEl && audioEl.buffered.length > 0 && !audioBuf.updating) {
+              const end = audioEl.buffered.end(audioEl.buffered.length - 1);
+              if (end - audioEl.currentTime > 5) {
+                try { audioBuf.remove(0, audioEl.currentTime - 1); } catch (_) {}
+              }
+            }
+          });
+          if (audioQueue.length > 0) {
+            try { audioBuf.appendBuffer(audioQueue.shift()); } catch (_) {}
+          }
+        } catch (err) {
+          console.warn('[audio] SourceBuffer error:', err);
+        }
+      });
+
+      audioEl.play().catch(() => {
+        document.getElementById('audioPlayBtn').style.display = '';
+      });
+    }
+
+    function handleAudioChunk(arrayBuffer) {
+      if (!isAudioActive) return;
+      if (audioBuf && !audioBuf.updating) {
+        try { audioBuf.appendBuffer(arrayBuffer); } catch (_) {}
+      } else {
+        audioQueue.push(arrayBuffer);
+        if (audioQueue.length > 40) audioQueue.splice(0, 15);
+      }
+    }
+
+    document.getElementById('audioPlayBtn').addEventListener('click', () => {
+      audioEl?.play().catch(() => {});
+      document.getElementById('audioPlayBtn').style.display = 'none';
+    });
+
+    document.getElementById('audioVol').addEventListener('input', (e) => {
+      if (audioEl) audioEl.volume = parseFloat(e.target.value);
+    });
+
+    // ── Publisher: microphone capture ─────────────────────────────────────
+
+    async function populateAudioDevices() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const inputs  = devices.filter(d => d.kind === 'audioinput');
+        const sel     = document.getElementById('audioDeviceSelect');
+        sel.innerHTML = '';
+        for (const d of inputs) {
+          const opt = document.createElement('option');
+          opt.value       = d.deviceId;
+          opt.textContent = d.label || `Microphone ${sel.options.length + 1}`;
+          sel.appendChild(opt);
+        }
+        document.getElementById('audioDeviceRow').style.display = inputs.length > 1 ? '' : 'none';
+      } catch (_) {}
+    }
+
+    function updateAudioToggle() {
+      const btn = document.getElementById('audioToggle');
+      btn.textContent   = isStreaming ? '◼ Stop streaming' : '⬤ Stream audio';
+      btn.style.color   = isStreaming ? 'var(--ok)' : '';
+      btn.style.borderColor = isStreaming ? 'var(--ok)' : '';
+    }
+
+    async function startAudioStream() {
+      const deviceId = document.getElementById('audioDeviceSelect').value;
+      try {
+        audioStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: deviceId ? { exact: deviceId } : undefined,
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+          },
+        });
+      } catch (err) {
+        console.error('[audio] getUserMedia failed:', err.name, err.message);
+        return;
+      }
+
+      const mimeType = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus']
+        .find(t => MediaRecorder.isTypeSupported(t)) || '';
+
+      const opts = mimeType ? { mimeType, audioBitsPerSecond: 32000 } : {};
+      const effectiveMime = mimeType || new MediaRecorder(audioStream).mimeType;
+
+      const ws = audioWs;
+      const announce = () => {
+        if (ws.readyState === WebSocket.OPEN)
+          ws.send(JSON.stringify({ type: 'audioStart', mimeType: effectiveMime }));
+      };
+      if (ws.readyState === WebSocket.OPEN) announce();
+      else ws.addEventListener('open', announce, { once: true });
+
+      mediaRecorder = new MediaRecorder(audioStream, opts);
+      mediaRecorder.ondataavailable = async (ev) => {
+        if (ev.data.size > 0 && audioWs?.readyState === WebSocket.OPEN) {
+          audioWs.send(await ev.data.arrayBuffer());
+        }
+      };
+      mediaRecorder.onerror = () => stopAudioStream();
+      mediaRecorder.start(250);
+
+      isStreaming = true;
+      updateAudioToggle();
+    }
+
+    function stopAudioStream() {
+      if (mediaRecorder?.state !== 'inactive') mediaRecorder?.stop();
+      mediaRecorder = null;
+      audioStream?.getTracks().forEach(t => t.stop());
+      audioStream = null;
+      if (audioWs?.readyState === WebSocket.OPEN)
+        audioWs.send(JSON.stringify({ type: 'audioStop' }));
+      isStreaming = false;
+      updateAudioToggle();
+    }
+
+    document.getElementById('audioToggle').addEventListener('click', async () => {
+      if (isStreaming) {
+        stopAudioStream();
+      } else {
+        await populateAudioDevices();
+        await startAudioStream();
+      }
+    });
+
+    connectAudioWs();
 
     // ── Snapshot capture ──────────────────────────────────────────────────
     const snapBtn = document.getElementById('snapBtn');
