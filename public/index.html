@@ -5,6 +5,7 @@
   <title>Scion Live</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="/js/mode-gate.js"></script>
   <style>
     :root {
       --bg: #0e1014;
@@ -134,7 +135,7 @@
         <button id="resetBtn" style="margin-top:10px;width:100%;background:var(--panel-2);color:var(--muted);border:1px solid var(--border)">Reset data</button>
       </div>
 
-      <div class="card">
+      <div class="card" id="recordCard">
         <h2>Record</h2>
         <input id="sessionName" type="text" placeholder="session name (optional)" />
         <div class="rec-row">
@@ -431,6 +432,7 @@ function connect() {
         for (const f of FIELDS) if (msg.latest[f] != null) setLatest(f, msg.latest[f]);
       }
       if (msg.recording) renderRecording(msg.recording);
+      if (msg.isRelay) gateForConsumer(['recordCard']);
     } else if (msg.type === 'recording') {
       renderRecording(msg.recording);
     }

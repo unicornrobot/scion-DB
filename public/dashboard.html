@@ -335,6 +335,7 @@
 
     // ── WebSocket ─────────────────────────────────────────────────────────
     const smooth = Object.fromEntries(FIELDS.map(f => [f, null]));
+    let isRelay = false;
 
     function fmt(v) {
       if (v === null || v === undefined) return '—';
@@ -368,9 +369,16 @@
             const f = msg.field;
             if (smooth[f] === null) smooth[f] = msg.value;
             else smooth[f] += ALPHA * (msg.value - smooth[f]);
-          } else if (msg.type === 'hello' && msg.latest) {
-            for (const f of FIELDS) {
-              if (msg.latest[f] != null) smooth[f] = msg.latest[f];
+          } else if (msg.type === 'hello') {
+            if (msg.latest) {
+              for (const f of FIELDS) {
+                if (msg.latest[f] != null) smooth[f] = msg.latest[f];
+              }
+            }
+            if (msg.isRelay) {
+              isRelay = true;
+              // Hides any delete buttons rendered before hello arrived.
+              document.querySelectorAll('.card-del').forEach(b => b.style.display = 'none');
             }
           }
         } catch (_) {}
@@ -551,10 +559,10 @@
             <div class="card-meta">${fmtDuration(s.startMs, s.endMs)} · ${fmtPoints(s.points)}</div>
             <div class="card-footer">
               <a class="card-link" href="/?session=${encodeURIComponent(s.session)}">Open in chart</a>
-              <button class="card-del" title="Delete recording">✕</button>
+              ${isRelay ? '' : '<button class="card-del" title="Delete recording">✕</button>'}
             </div>`;
 
-          body.querySelector('.card-del').addEventListener('click', async () => {
+          if (!isRelay) body.querySelector('.card-del').addEventListener('click', async () => {
             if (!confirm(`Delete recording "${s.session}"?\n\nThis removes all data from InfluxDB and cannot be undone.`)) return;
             try {
               const r = await fetch(`/api/sessions/${encodeURIComponent(s.session)}`, { method: 'DELETE' });

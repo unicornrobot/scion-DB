@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <title>Scion · Visualizer</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script src="/js/mode-gate.js"></script>
   <style>
     :root {
       --bg:     #0e1014;
@@ -1318,6 +1319,11 @@
               document.getElementById('audioPublishRow').style.display = 'none';
               document.getElementById('audioDeviceRow').style.display  = 'none';
               document.getElementById('audioRelayNote').style.display  = '';
+              gateForConsumer(['snapBtn', 'ppSave']);
+              ['ppName', 'ppSpecies', 'ppUrl', 'ppNotes'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.disabled = true;
+              });
             }
             if (msg.audioActive) {
               console.log('[audio] late-join: stream already active, mimeType:', msg.audioMimeType);
