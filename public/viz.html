@@ -653,17 +653,11 @@
 
     function setViz(name) {
       engine.activate(name);
-<<<<<<< HEAD
       sacredSettings.style.display   = name === 'sacred'   ? '' : 'none';
       organicSettings.style.display  = name === 'organic'  ? '' : 'none';
       plantSettings.style.display    = name === 'plant'    ? '' : 'none';
       tapestrySettings.style.display = name === 'tapestry' ? '' : 'none';
-=======
-      sacredSettings.style.display  = name === 'sacred'  ? '' : 'none';
-      organicSettings.style.display = name === 'organic' ? '' : 'none';
-      plantSettings.style.display   = name === 'plant'   ? '' : 'none';
       localStorage.setItem('scion-active-viz', name);
->>>>>>> c491713 (fullscreen button)
     }
 
     document.getElementById('vizPicker').addEventListener('change', (e) => {
