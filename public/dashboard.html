@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <title>Scion · Dashboard</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script src="/js/nav.js"></script>
   <style>
     :root {
       --bg:       #090d0b;
@@ -43,15 +44,6 @@
     .dot.live { background: var(--ok); box-shadow: 0 0 5px var(--ok); }
     .conn-label { font-size: 11px; color: var(--muted); }
     .conn-label.live { color: var(--ok); }
-    nav.hdr-nav { display: flex; gap: 4px; }
-    nav.hdr-nav a {
-      padding: 5px 12px; border-radius: 6px;
-      font-size: 12px; text-decoration: none;
-      color: var(--muted); border: 1px solid transparent;
-      transition: color .15s, border-color .15s;
-    }
-    nav.hdr-nav a:hover { color: var(--fg); border-color: var(--border-l); }
-
     /* ── Page layout ─────────────────────────────────────────────────────── */
     .page { max-width: 1400px; margin: 0 auto; padding: 24px 24px 48px; }
 
@@ -217,10 +209,7 @@
       <span class="dot" id="connDot"></span>
       <span class="conn-label" id="connLabel">connecting…</span>
     </div>
-    <nav class="hdr-nav">
-      <a href="/viz">Visualizer</a>
-      <a href="/">Chart</a>
-    </nav>
+    <div data-scion-nav data-page="dashboard"></div>
   </header>
 
   <div class="page">

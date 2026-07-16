@@ -5,6 +5,7 @@
   <title>Scion · Visualizer</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <script src="/js/mode-gate.js"></script>
+  <script src="/js/nav.js"></script>
   <style>
     :root {
       --bg:     #0e1014;
@@ -21,7 +22,7 @@
 
     /* Sidebar toggle — always on screen */
     #sidebarToggle {
-      position: fixed; top: 12px; left: 12px; z-index: 30;
+      position: fixed; top: 12px; right: 12px; z-index: 30;
       width: 34px; height: 34px;
       background: rgba(14,16,20,.88); border: 1px solid var(--border);
       color: var(--muted); border-radius: 8px; cursor: pointer;
@@ -34,13 +35,13 @@
 
     /* Sidebar */
     #sidebar {
-      position: fixed; left: 0; top: 0; bottom: 0; z-index: 20;
+      position: fixed; right: 0; top: 0; bottom: 0; z-index: 20;
       width: 240px;
       background: rgba(14,16,20,.97);
-      border-right: 1px solid var(--border);
+      border-left: 1px solid var(--border);
       backdrop-filter: blur(12px);
       display: flex; flex-direction: column;
-      transform: translateX(-100%);
+      transform: translateX(100%);
       transition: transform .22s cubic-bezier(.4,0,.2,1);
       overflow-y: auto;
       padding-top: 58px;
@@ -153,7 +154,7 @@
 
     /* ── Fullscreen button (floating, top-right) ────────────────────────── */
     #fsBtn {
-      position: fixed; top: 12px; right: 12px; z-index: 30;
+      position: fixed; top: 12px; left: 12px; z-index: 30;
       width: 34px; height: 34px;
       background: rgba(14,16,20,.88); border: 1px solid var(--border);
       color: var(--muted); border-radius: 8px; cursor: pointer;
@@ -237,6 +238,10 @@
         <span class="dot" id="connDot"></span>
         <span class="conn-label" id="connLabel">connecting…</span>
       </div>
+    </div>
+
+    <div class="sb-section">
+      <div data-scion-nav data-page="viz"></div>
     </div>
 
     <div class="sb-section">
@@ -589,13 +594,6 @@
       </div>
       <div class="ap-row">
         <button class="ap-btn" id="ppSave">Save plant</button>
-      </div>
-    </div>
-
-    <div class="sb-section">
-      <div style="display:flex;gap:8px">
-        <a href="/dashboard" class="ap-btn" style="flex:1;text-align:center;text-decoration:none;display:block">Dashboard</a>
-        <a href="/" class="ap-btn" style="flex:1;text-align:center;text-decoration:none;display:block">Chart</a>
       </div>
     </div>
 
