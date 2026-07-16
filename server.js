@@ -60,6 +60,9 @@ const recording = {
   lastError: null,
 };
 
+let audioActive   = false;
+let audioMimeType = '';
+
 // ---------------------------------------------------------------------------
 // InfluxDB client (lazy-checked; missing creds only error when recording).
 // ---------------------------------------------------------------------------
@@ -440,7 +443,7 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
 wss.on('connection', (ws) => {
-  ws.send(JSON.stringify({ type: 'hello', latest, recording }));
+  ws.send(JSON.stringify({ type: 'hello', latest, recording, audioActive, audioMimeType }));
 
   ws.on('message', (data, isBinary) => {
     if (isBinary) {
@@ -449,6 +452,13 @@ wss.on('connection', (ws) => {
       try {
         const msg = JSON.parse(data.toString());
         if (msg.type === 'audioStart' || msg.type === 'audioStop') {
+          if (msg.type === 'audioStart') {
+            audioActive   = true;
+            audioMimeType = msg.mimeType || '';
+          } else {
+            audioActive   = false;
+            audioMimeType = '';
+          }
           const str = data.toString();
           for (const client of wss.clients) {
             if (client !== ws && client.readyState === 1) client.send(str);

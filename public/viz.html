@@ -559,12 +559,15 @@
     <!-- Audio stream -->
     <div class="sb-section" id="audioSection">
       <div class="sb-label">Audio stream</div>
-      <div class="ap-row">
+      <div class="ap-row" id="audioPublishRow">
         <button class="ap-btn" id="audioToggle">⬤ Stream audio</button>
       </div>
       <div class="ap-row" id="audioDeviceRow" style="display:none">
         <div class="ap-label"><span>Input</span></div>
         <select class="ap-select" id="audioDeviceSelect"></select>
+      </div>
+      <div class="ap-row" id="audioRelayNote" style="display:none">
+        <span style="color:var(--muted);font-size:11px">Audio streams from the local machine</span>
       </div>
     </div>
 
@@ -1310,12 +1313,27 @@
         }
         try {
           const msg = JSON.parse(e.data);
-          if (msg.type === 'audioStart') {
+          if (msg.type === 'hello') {
+            if (msg.isRelay) {
+              document.getElementById('audioPublishRow').style.display = 'none';
+              document.getElementById('audioDeviceRow').style.display  = 'none';
+              document.getElementById('audioRelayNote').style.display  = '';
+            }
+            if (msg.audioActive) {
+              console.log('[audio] late-join: stream already active, mimeType:', msg.audioMimeType);
+              isAudioActive = true;
+              audioQueue    = [];
+              setupAudioPlayback(msg.audioMimeType || 'audio/webm;codecs=opus');
+              document.getElementById('audioPlayer').style.display = 'flex';
+            }
+          } else if (msg.type === 'audioStart') {
+            console.log('[audio] audioStart received, mimeType:', msg.mimeType);
             isAudioActive = true;
             audioQueue    = [];
             setupAudioPlayback(msg.mimeType || 'audio/webm;codecs=opus');
             document.getElementById('audioPlayer').style.display = 'flex';
           } else if (msg.type === 'audioStop') {
+            console.log('[audio] audioStop received');
             isAudioActive = false;
             document.getElementById('audioPlayer').style.display = 'none';
             if (audioMS && audioMS.readyState === 'open') {
@@ -1353,6 +1371,7 @@
       audioEl.src   = URL.createObjectURL(audioMS);
 
       audioMS.addEventListener('sourceopen', () => {
+        console.log('[audio] MediaSource open, adding SourceBuffer for', mimeType);
         try {
           audioBuf = audioMS.addSourceBuffer(mimeType);
           audioBuf.mode = 'sequence';
@@ -1371,13 +1390,13 @@
           if (audioQueue.length > 0) {
             try { audioBuf.appendBuffer(audioQueue.shift()); } catch (_) {}
           }
+          audioEl.play().catch(() => {
+            console.log('[audio] autoplay blocked — showing play button');
+            document.getElementById('audioPlayBtn').style.display = '';
+          });
         } catch (err) {
           console.warn('[audio] SourceBuffer error:', err);
         }
-      });
-
-      audioEl.play().catch(() => {
-        document.getElementById('audioPlayBtn').style.display = '';
       });
     }
 

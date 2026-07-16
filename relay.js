@@ -55,6 +55,8 @@ const viewers    = new Set();
 const latest     = {};
 let   publisherConnected = false;
 let   publisherWs        = null;
+let   audioActive        = false;
+let   audioMimeType      = '';
 
 wss.on('connection', (ws, req) => {
   const url   = new URL(req.url, 'http://x');
@@ -86,6 +88,12 @@ wss.on('connection', (ws, req) => {
         const msg = JSON.parse(data);
         if (msg.type === 'sample' && Number.isFinite(msg.value)) {
           latest[msg.field] = msg.value;
+        } else if (msg.type === 'audioStart') {
+          audioActive   = true;
+          audioMimeType = msg.mimeType || '';
+        } else if (msg.type === 'audioStop') {
+          audioActive   = false;
+          audioMimeType = '';
         }
       } catch (_) {}
       const str = data.toString();
@@ -111,7 +119,7 @@ wss.on('connection', (ws, req) => {
     viewers.add(ws);
     console.log(`[relay] viewer connected (${viewers.size} total)`);
 
-    ws.send(JSON.stringify({ type: 'hello', latest }));
+    ws.send(JSON.stringify({ type: 'hello', latest, audioActive, audioMimeType, isRelay: true }));
 
     ws.on('close', () => {
       viewers.delete(ws);
