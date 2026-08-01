@@ -1,3 +1,12 @@
+// Shared canvas background color, following the dark/light theme toggle —
+// independent of each visualizer's own artistic palette (Aurora/Fire/Biolum/…),
+// which stays fixed regardless of theme. Cached and refreshed on
+// scion-theme-change so visualizers don't need getComputedStyle every frame.
+window.scionCanvasBg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+document.documentElement.addEventListener('scion-theme-change', () => {
+  window.scionCanvasBg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+});
+
 /**
  * VizEngine — lightweight plugin host for canvas visualizers.
  *

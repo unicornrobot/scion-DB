@@ -143,7 +143,7 @@ class TapestryVisualizer {
     }
 
     // ── compose frame ────────────────────────────────────────────────────────
-    ctx.fillStyle = '#0e1014';
+    ctx.fillStyle = window.scionCanvasBg;
     ctx.fillRect(0, 0, w, h);
     ctx.drawImage(this._trail, 0, 0, w, h);
     this._drawShuttle(ctx, moving);

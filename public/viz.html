@@ -4,19 +4,21 @@
   <meta charset="utf-8" />
   <title>Scion · Visualizer</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script src="/js/theme.js"></script>
+  <link rel="stylesheet" href="/css/shared.css" />
   <script src="/js/mode-gate.js"></script>
   <script src="/js/nav.js"></script>
+  <script src="/js/fullscreen.js"></script>
+  <script src="/js/rec-widget.js"></script>
   <style>
     :root {
-      --bg:     #0e1014;
-      --panel:  rgba(22,26,34,.80);
-      --border: #2a313d;
-      --fg:     #e6e9ef;
-      --muted:  #8a93a3;
-      --accent: #4cc9f0;
-      --ok:     #06d6a0;
+      /* Viz overlays the canvas, so its panel needs transparency + blur —
+         everything else (bg/border/fg/muted/accent/ok) comes from shared.css. */
+      --panel: rgba(22,26,34,.80);
     }
-    * { box-sizing: border-box; }
+    :root[data-theme="light"] {
+      --panel: rgba(255,255,255,.82);
+    }
     html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); }
     canvas#viz { display: block; width: 100%; height: 100%; }
 
@@ -59,12 +61,6 @@
       font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px;
       color: var(--muted); font-weight: 700; margin-bottom: 8px;
     }
-
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted);
-      flex-shrink: 0; transition: background .4s; }
-    .dot.live { background: var(--ok); }
-    .conn-label { font-size: 12px; color: var(--muted); }
-    .conn-label.live { color: var(--ok); }
 
     /* Live data readout overlay (bottom-right) */
     #readoutWrap {
@@ -243,6 +239,8 @@
     <div class="sb-section">
       <div data-scion-nav data-page="viz"></div>
     </div>
+
+    <div class="sb-section" id="recSection"></div>
 
     <div class="sb-section">
       <div class="sb-label">Visualizer</div>
@@ -651,6 +649,14 @@
 
     document.getElementById('sidebarToggle').addEventListener('click', () => {
       sidebar.classList.toggle('open');
+    });
+
+    // ── Record widget ──────────────────────────────────────────────────────
+    // Lets recording be started/stopped from the Visualizer too, not just
+    // Chart. Fed from connectRecordingWs() below (it already parses exactly
+    // the recording/hello message types) — no extra socket needed.
+    const recWidget = ScionRecWidget.create({
+      container: document.getElementById('recSection'),
     });
 
     function setViz(name) {
@@ -1317,7 +1323,7 @@
               document.getElementById('audioPublishRow').style.display = 'none';
               document.getElementById('audioDeviceRow').style.display  = 'none';
               document.getElementById('audioRelayNote').style.display  = '';
-              gateForConsumer(['snapBtn', 'ppSave']);
+              gateForConsumer(['snapBtn', 'ppSave', 'recSection']);
               ['ppName', 'ppSpecies', 'ppUrl', 'ppNotes'].forEach(id => {
                 const el = document.getElementById(id);
                 if (el) el.disabled = true;
@@ -1548,6 +1554,7 @@
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
+          recWidget.onMessage(msg);
           if (msg.type === 'hello' && msg.recording) {
             prevActive     = msg.recording.active;
             currentSession = msg.recording.session || null;
@@ -1570,46 +1577,7 @@
     })();
 
     // ── Fullscreen ────────────────────────────────────────────────────────
-    const fsBtn = document.getElementById('fsBtn');
-    const fsEl  = document.documentElement;
-
-    // Vendor-prefixed helpers (iOS Safari uses webkit prefix)
-    const _requestFS = (fsEl.requestFullscreen || fsEl.webkitRequestFullscreen ||
-                        fsEl.mozRequestFullScreen || fsEl.msRequestFullscreen);
-    const _exitFS    = (document.exitFullscreen || document.webkitExitFullscreen ||
-                        document.mozCancelFullScreen || document.msExitFullscreen);
-    const _isFS      = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
-    const fsSupported = !!_requestFS;
-
-    function applyFsIcon() {
-      fsBtn.textContent = _isFS() ? '⊡' : '⛶';
-      fsBtn.title       = _isFS() ? 'Exit fullscreen (F / Esc)' : 'Fullscreen (F)';
-    }
-
-    function toggleFullscreen() {
-      if (!fsSupported) return;
-      if (_isFS()) {
-        _exitFS.call(document);
-      } else {
-        _requestFS.call(fsEl).catch(() => {});
-      }
-    }
-
-    fsBtn.addEventListener('click', toggleFullscreen);
-
-    ['fullscreenchange', 'webkitfullscreenchange', 'mozfullscreenchange'].forEach(ev =>
-      document.addEventListener(ev, applyFsIcon));
-
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'F' || e.key === 'f') {
-        if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'SELECT') {
-          toggleFullscreen();
-        }
-      }
-    });
-
-    // Hide the button entirely if the API isn't available (e.g. older iOS)
-    if (!fsSupported) fsBtn.style.display = 'none';
+    initFullscreen(document.getElementById('fsBtn'));
   </script>
 </body>
 </html>

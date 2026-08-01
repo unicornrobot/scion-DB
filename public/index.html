@@ -4,22 +4,14 @@
   <meta charset="utf-8" />
   <title>Scion Live</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script src="/js/theme.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="/css/shared.css" />
   <script src="/js/mode-gate.js"></script>
   <script src="/js/nav.js"></script>
+  <script src="/js/fullscreen.js"></script>
+  <script src="/js/rec-widget.js"></script>
   <style>
-    :root {
-      --bg: #0e1014;
-      --panel: #161a22;
-      --panel-2: #1f2530;
-      --border: #2a313d;
-      --fg: #e6e9ef;
-      --muted: #8a93a3;
-      --accent: #4cc9f0;
-      --rec: #ef476f;
-      --ok: #06d6a0;
-    }
-    * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg);
       color: var(--fg); font: 14px/1.4 -apple-system, "Segoe UI", system-ui, sans-serif;
       display: flex; flex-direction: column; }
@@ -30,18 +22,11 @@
     }
     header h1 { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: .3px; }
     header .status { color: var(--muted); font-size: 12px; }
-    .layout { flex: 1 1 0; min-height: 0; display: grid;
-      grid-template-columns: 1fr 200px; gap: 16px; padding: 16px; overflow: hidden; }
-    .chart-wrap { background: var(--panel); border: 1px solid var(--border);
-      border-radius: 10px; padding: 12px; position: relative; min-height: 0;
+
+    .chart-wrap { flex: 1 1 0; min-height: 0; position: relative;
       display: flex; flex-direction: column; overflow: hidden; }
     .chart-wrap canvas { flex: 1 1 0; min-height: 0; min-width: 0; }
-    .side { display: flex; flex-direction: column; gap: 14px;
-      overflow-y: auto; min-height: 0; }
-    .card { background: var(--panel); border: 1px solid var(--border);
-      border-radius: 10px; padding: 14px; }
-    .card h2 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase;
-      letter-spacing: 1px; color: var(--muted); font-weight: 600; }
+
     .stats { display: grid; grid-template-columns: 1fr; gap: 5px; }
     .stat { display: flex; justify-content: space-between; align-items: center;
       padding: 6px 8px; background: var(--panel-2); border-radius: 6px; }
@@ -59,21 +44,9 @@
     .toggles { display: grid; grid-template-columns: 1fr; gap: 4px; }
     .toggles label { display: flex; align-items: center; gap: 6px; padding: 4px 6px;
       background: var(--panel-2); border-radius: 6px; cursor: pointer; }
-    button { background: var(--accent); color: #08161d; border: 0; border-radius: 8px;
-      padding: 9px 14px; font-weight: 600; cursor: pointer; }
-    button:disabled { opacity: .5; cursor: not-allowed; }
-    button.danger { background: var(--rec); color: #fff; }
-    input[type=text] { width: 100%; padding: 9px 10px; background: var(--panel-2);
-      border: 1px solid var(--border); color: var(--fg); border-radius: 8px; }
-    .rec-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+    input[type=text] { width: 100%; }
     .rec-status { font-size: 12px; color: var(--muted); margin-top: 8px; min-height: 16px; }
     .rec-status.active { color: var(--rec); }
-    .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
-      padding: 3px 8px; border-radius: 999px; background: var(--panel-2);
-      color: var(--muted); border: 1px solid var(--border); }
-    .pill.on { color: var(--ok); border-color: rgba(6,214,160,.4); }
-    .pill.rec { color: var(--rec); border-color: rgba(239,71,111,.4); }
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
     .row { display: flex; gap: 6px; margin-bottom: 8px; }
     .row label { color: var(--muted); font-size: 12px; }
     .session-list { margin-top: 10px; max-height: 260px; overflow: auto;
@@ -91,70 +64,68 @@
       border: 1px solid rgba(76,201,240,.4); border-radius: 999px;
       font-size: 12px; font-weight: 600; pointer-events: none; z-index: 2; display: none; }
     .mode-banner.show { display: block; }
-    .fs-btn { position: absolute; top: 10px; right: 10px; z-index: 3;
-      background: rgba(30,36,46,.75); border: 1px solid var(--border);
-      color: var(--muted); border-radius: 6px; padding: 4px 7px;
-      font-size: 15px; line-height: 1; cursor: pointer; backdrop-filter: blur(4px); }
-    .fs-btn:hover { color: var(--fg); border-color: var(--muted); }
-    .header-btn { background: rgba(30,36,46,.75); border: 1px solid var(--border);
-      color: var(--muted); border-radius: 6px; padding: 4px 9px;
-      font-size: 13px; line-height: 1; cursor: pointer; }
-    .header-btn:hover { color: var(--fg); border-color: var(--muted); }
+
+    /* Floating chrome, positioned like Viz's — but Chart keeps a real header
+       (Viz doesn't), so these are absolute within .chart-wrap rather than
+       fixed to the viewport, or they'd sit on top of the header/nav. */
+    #fsBtn, #drawerToggle { position: absolute; }
+    #fsBtn         { top: 12px; left: 12px; }
+    #drawerToggle  { top: 12px; right: 12px; }
+
+    #drawer .drawer-btn {
+      width: 100%; padding: 9px; margin-top: 10px;
+      background: var(--panel-2); color: var(--muted); border: 1px solid var(--border);
+      border-radius: 8px; font-size: 13px; cursor: pointer;
+    }
   </style>
 </head>
 <body>
-  <header>
+  <header class="fs-hide">
     <h1>Pocket Scion · live</h1>
     <span id="conn" class="pill"><span class="dot"></span><span>disconnected</span></span>
     <span id="recPill" class="pill"><span class="dot"></span><span>idle</span></span>
     <span class="status" id="oscInfo" style="flex:1"></span>
-    <button id="sidebarBtn" class="header-btn" title="Toggle sidebar">◀</button>
     <div data-scion-nav data-page="chart"></div>
   </header>
 
-  <div class="layout">
-    <div class="chart-wrap">
-      <div id="modeBanner" class="mode-banner"></div>
-      <button class="fs-btn" id="fsBtn" title="Toggle fullscreen">⛶</button>
-      <canvas id="chart"></canvas>
+  <div class="chart-wrap">
+    <div id="modeBanner" class="mode-banner"></div>
+    <button class="scion-float-btn fs-hide" id="fsBtn" title="Fullscreen (F)">⛶</button>
+    <button class="scion-float-btn fs-hide" id="drawerToggle" title="Settings">☰</button>
+    <canvas id="chart"></canvas>
+  </div>
+
+  <nav class="scion-drawer fs-hide" id="drawer">
+    <div class="scion-drawer__header">
+      <div class="scion-drawer__title">Pocket Scion</div>
     </div>
 
-    <aside class="side">
-      <div class="card">
-        <h2>Latest</h2>
-        <div class="stats" id="stats"></div>
-      </div>
+    <div class="scion-drawer__section">
+      <div class="scion-drawer__label">Latest</div>
+      <div class="stats" id="stats"></div>
+    </div>
 
-      <div class="card">
-        <h2>Series</h2>
-        <div id="toggles"></div>
-        <div class="row" style="margin-top:10px">
-          <label for="window">Window (s)</label>
-        </div>
-        <input id="window" type="text" value="60" />
-        <button id="resetBtn" style="margin-top:10px;width:100%;background:var(--panel-2);color:var(--muted);border:1px solid var(--border)">Reset data</button>
+    <div class="scion-drawer__section">
+      <div class="scion-drawer__label">Series</div>
+      <div id="toggles"></div>
+      <div class="row" style="margin-top:10px">
+        <label for="window">Window (s)</label>
       </div>
+      <input id="window" type="text" value="60" />
+      <button id="resetBtn" class="drawer-btn">Reset data</button>
+    </div>
 
-      <div class="card" id="recordCard">
-        <h2>Record</h2>
-        <input id="sessionName" type="text" placeholder="session name (optional)" />
-        <div class="rec-row">
-          <button id="recBtn">Record</button>
-          <button id="stopBtn" class="danger" disabled>Stop</button>
-        </div>
-        <div id="recStatus" class="rec-status">Not recording.</div>
-      </div>
+    <div class="scion-drawer__section" id="recordCard"></div>
 
-      <div class="card">
-        <h2>Playback</h2>
-        <div class="rec-row" style="margin-top:0">
-          <button id="refreshSessions" style="background:var(--panel-2);color:var(--fg);border:1px solid var(--border)">Refresh</button>
-          <button id="liveBtn" disabled>Back to live</button>
-        </div>
-        <div id="sessionList" class="session-list">Loading…</div>
+    <div class="scion-drawer__section">
+      <div class="scion-drawer__label">Playback</div>
+      <div class="row" style="margin-top:0">
+        <button id="refreshSessions" class="ghost" style="flex:1">Refresh</button>
+        <button id="liveBtn" disabled style="flex:1">Back to live</button>
       </div>
-    </aside>
-  </div>
+      <div id="sessionList" class="session-list">Loading…</div>
+    </div>
+  </nav>
 
 <script>
 const FIELDS = ['min', 'max', 'mean', 'delta', 'variance', 'deviation'];
@@ -169,6 +140,13 @@ const COLORS = {
 
 const enabled = Object.fromEntries(FIELDS.map(f => [f, true]));
 const series = Object.fromEntries(FIELDS.map(f => [f, []])); // [{x:ms, y:value}]
+
+// Chart.js needs literal color strings, not CSS var() references, so its
+// tick/grid colors are read from the live CSS custom properties here and
+// refreshed whenever the dark/light theme changes (see theme.js).
+function themeColor(varName) {
+  return getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+}
 
 const ctx = document.getElementById('chart').getContext('2d');
 const chart = new Chart(ctx, {
@@ -198,15 +176,15 @@ const chart = new Chart(ctx, {
         min: Date.now() - 60_000,
         max: Date.now(),
         ticks: {
-          color: '#8a93a3',
+          color: themeColor('--muted'),
           callback: v => new Date(v).toLocaleTimeString(),
           maxTicksLimit: 6,
         },
-        grid: { color: '#1f2530' },
+        grid: { color: themeColor('--border') },
       },
       y: {
-        ticks: { color: '#8a93a3' },
-        grid: { color: '#1f2530' },
+        ticks: { color: themeColor('--muted') },
+        grid: { color: themeColor('--border') },
       },
     },
     plugins: {
@@ -416,6 +394,15 @@ function setConn(state) {
     state === 'on' ? 'connected' : 'disconnected';
 }
 
+// --- recording UI ------------------------------------------------------------
+const recPill = document.getElementById('recPill');
+const recWidget = ScionRecWidget.create({
+  container: document.getElementById('recordCard'),
+  label: 'Record',
+  recPill,
+  onRecordingStopped: () => { if (typeof loadSessions === 'function') loadSessions(); },
+});
+
 let ws;
 function connect() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -425,81 +412,23 @@ function connect() {
   ws.onerror = () => ws.close();
   ws.onmessage = (e) => {
     const msg = JSON.parse(e.data);
+    recWidget.onMessage(msg);
     if (msg.type === 'sample') {
       pushSample(msg.field, msg.value, msg.ts);
     } else if (msg.type === 'hello') {
       if (msg.latest) {
         for (const f of FIELDS) if (msg.latest[f] != null) setLatest(f, msg.latest[f]);
       }
-      if (msg.recording) renderRecording(msg.recording);
       if (msg.isRelay) gateForConsumer(['recordCard']);
-    } else if (msg.type === 'recording') {
-      renderRecording(msg.recording);
     }
   };
 }
 connect();
 
-// --- recording UI ----------------------------------------------------------
-const recBtn = document.getElementById('recBtn');
-const stopBtn = document.getElementById('stopBtn');
-const recStatus = document.getElementById('recStatus');
-const sessionName = document.getElementById('sessionName');
-const recPill = document.getElementById('recPill');
-
-let _wasRecording = false;
-function renderRecording(rec) {
-  const active = rec && rec.active;
-  recBtn.disabled = active;
-  stopBtn.disabled = !active;
-  recPill.classList.toggle('rec', active);
-  recPill.querySelector('span:last-child').textContent = active ? 'recording' : 'idle';
-  if (active) {
-    recStatus.classList.add('active');
-    const elapsed = ((Date.now() - rec.startedAt) / 1000) | 0;
-    recStatus.textContent =
-      `● ${rec.session} · ${elapsed}s · ${rec.pointsWritten} pts`;
-  } else {
-    recStatus.classList.remove('active');
-    recStatus.textContent = 'Not recording.';
-  }
-  if (_wasRecording && !active && typeof loadSessions === 'function') {
-    loadSessions();
-  }
-  _wasRecording = active;
-}
-
-async function api(path, body) {
-  const r = await fetch(path, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data.error || r.statusText);
-  return data;
-}
-
-recBtn.addEventListener('click', async () => {
-  try {
-    await api('/api/record/start', { session: sessionName.value.trim() || undefined });
-  } catch (err) {
-    recStatus.textContent = 'Error: ' + err.message;
-  }
-});
-stopBtn.addEventListener('click', async () => {
-  try {
-    await api('/api/record/stop');
-  } catch (err) {
-    recStatus.textContent = 'Error: ' + err.message;
-  }
-});
-
-// Periodically refresh recording status from server so elapsed time + count tick.
+// Periodically refresh OSC/Influx status text.
 setInterval(async () => {
   try {
     const r = await fetch('/api/status').then(r => r.json());
-    if (r.recording && r.recording.active) renderRecording(r.recording);
     document.getElementById('oscInfo').textContent =
       `OSC udp://${r.osc.host}:${r.osc.port} · Influx ${r.influx.configured ? r.influx.bucket + '@' + r.influx.org : 'NOT CONFIGURED'}`;
   } catch (_) {}
@@ -612,73 +541,42 @@ refreshBtn.addEventListener('click', loadSessions);
 liveBtn.addEventListener('click', returnToLive);
 loadSessions();
 
-// --- sidebar + fullscreen toggle -------------------------------------------
-const fsBtn       = document.getElementById('fsBtn');
-const sidebarBtn  = document.getElementById('sidebarBtn');
-const asideEl     = document.querySelector('aside.side');
-const headerEl    = document.querySelector('header');
-const layoutEl    = document.querySelector('.layout');
-const chartWrapEl = document.querySelector('.chart-wrap');
+// --- drawer + fullscreen ----------------------------------------------------
+const drawer        = document.getElementById('drawer');
+const drawerToggle  = document.getElementById('drawerToggle');
 
-let sidebarOpen             = true;
-let isFullscreen            = false;
-let sidebarBeforeFullscreen = true;
+drawerToggle.addEventListener('click', () => drawer.classList.toggle('open'));
 
-function applyLayout() {
-  const canvas = document.getElementById('chart');
-
-  // Apply all DOM/style changes.
-  const showSide = sidebarOpen && !isFullscreen;
-  asideEl.style.display              = showSide ? '' : 'none';
-  layoutEl.style.gridTemplateColumns = showSide ? '1fr 200px' : '1fr';
-  sidebarBtn.textContent             = sidebarOpen ? '◀' : '▶';
-  headerEl.style.display             = isFullscreen ? 'none' : '';
-  layoutEl.style.padding             = isFullscreen ? '0' : '';
-  layoutEl.style.gap                 = isFullscreen ? '0' : '';
-  chartWrapEl.style.borderRadius     = isFullscreen ? '0' : '';
-  chartWrapEl.style.border           = isFullscreen ? 'none' : '';
-  chartWrapEl.style.padding          = isFullscreen ? '8px' : '';
-
-  // Zero the canvas inline dimensions so the stale pixel values don't prevent
-  // the chart-wrap from collapsing to its new CSS size during the reflow.
-  canvas.style.width  = '0';
-  canvas.style.height = '0';
-
-  // Force a synchronous layout reflow.  After this, chartWrapEl.clientWidth
-  // reflects the new grid/flex dimensions — not the old canvas size.
-  void chartWrapEl.offsetWidth;
-
-  // Compute the exact drawable area and hand it to Chart.js explicitly so it
-  // never has to guess the container size from a potentially stale canvas.
-  const cs = getComputedStyle(chartWrapEl);
-  const pw = parseFloat(cs.paddingLeft)  + parseFloat(cs.paddingRight);
-  const ph = parseFloat(cs.paddingTop)   + parseFloat(cs.paddingBottom);
-  const w  = Math.max(1, chartWrapEl.clientWidth  - pw);
-  const h  = Math.max(1, chartWrapEl.clientHeight - ph);
-  chart.resize(w, h);
-}
-
-function setSidebar(open) {
-  sidebarOpen = open;
-  applyLayout();
-}
-
-function setFullscreen(on) {
-  if (on === isFullscreen) return;
-  if (on) sidebarBeforeFullscreen = sidebarOpen;
-  isFullscreen = on;
-  if (!on) sidebarOpen = sidebarBeforeFullscreen;
-  fsBtn.textContent = on ? '✕' : '⛶';
-  fsBtn.title       = on ? 'Exit fullscreen' : 'Fullscreen (F)';
-  applyLayout();
-}
-
-sidebarBtn.addEventListener('click', () => setSidebar(!sidebarOpen));
-fsBtn.addEventListener('click', () => setFullscreen(!isFullscreen));
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape' && isFullscreen) setFullscreen(false);
-  if (e.key === 'f' && e.target.tagName !== 'INPUT') setFullscreen(!isFullscreen);
+initFullscreen(document.getElementById('fsBtn'), {
+  onChange: () => chart.resize(),
 });
+
+// Chart.js auto-resizes via its own ResizeObserver when responsive:true, but
+// give it an explicit nudge on any .chart-wrap size change as a safety net
+// (e.g. drawer open/close, orientation change).
+new ResizeObserver(() => chart.resize()).observe(document.querySelector('.chart-wrap'));
+
+// Re-read tick/grid colors whenever the dark/light theme changes.
+document.documentElement.addEventListener('scion-theme-change', () => {
+  chart.options.scales.x.ticks.color = themeColor('--muted');
+  chart.options.scales.x.grid.color  = themeColor('--border');
+  chart.options.scales.y.ticks.color = themeColor('--muted');
+  chart.options.scales.y.grid.color  = themeColor('--border');
+  chart.update('none');
+});
+
+// --- embed mode --------------------------------------------------------------
+// Mirrors viz.html's ?embed handling: strips all chrome, leaving a bare
+// canvas, so this page can be iframed the same way (used by Dashboard's
+// view switcher).
+if (new URLSearchParams(location.search).has('embed')) {
+  document.querySelectorAll('.fs-hide').forEach(el => el.style.display = 'none');
+}
+
+// --- deep-link to a recorded session -----------------------------------------
+// Lets Dashboard's gallery "Open in chart" links (/?session=<name>) work.
+const linkedSession = new URLSearchParams(location.search).get('session');
+if (linkedSession) loadSession(linkedSession);
 </script>
 </body>
 </html>

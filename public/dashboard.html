@@ -4,24 +4,37 @@
   <meta charset="utf-8" />
   <title>Scion · Dashboard</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script src="/js/theme.js"></script>
+  <link rel="stylesheet" href="/css/shared.css" />
   <script src="/js/nav.js"></script>
   <style>
     :root {
+      /* Dashboard keeps its own green "plant" palette; --accent/--ok match
+         shared.css already so they're not repeated here. */
       --bg:       #090d0b;
       --panel:    #0d1210;
       --border:   #1e2a22;
       --border-l: #2a3d30;
       --fg:       #d8e6da;
       --muted:    #6a8872;
-      --accent:   #4cc9f0;
-      --ok:       #06d6a0;
       --plant:    #3a7d44;
       --plant-l:  #6ab87a;
-      --mono:     "SF Mono","Fira Code",monospace;
       --card-glow: 0 2px 18px rgba(0,200,80,.05);
       --card-hov:  0 4px 28px rgba(0,200,80,.12);
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root[data-theme="light"] {
+      --bg:       #f6f9f6;
+      --panel:    #ffffff;
+      --border:   #d7e2da;
+      --border-l: #c2d3c7;
+      --fg:       #16241a;
+      --muted:    #4c6857;
+      --plant:    #2f6636;
+      --plant-l:  #3d8a4c;
+      --card-glow: 0 2px 14px rgba(0,120,50,.08);
+      --card-hov:  0 4px 22px rgba(0,120,50,.14);
+    }
+    * { margin: 0; padding: 0; }
     html { font: 13px/1.5 -apple-system,"Segoe UI",system-ui,sans-serif; }
     body { background: var(--bg); color: var(--fg); min-height: 100vh; }
 
@@ -62,7 +75,12 @@
     }
     @media (max-width: 900px) {
       .live-pane { grid-template-columns: 1fr; }
-      .live-viz  { aspect-ratio: 16/9; }
+      .live-viz  { aspect-ratio: 16/9; min-height: 0; }
+    }
+    @media (max-width: 480px) {
+      .page { padding: 16px 16px 32px; }
+      .view-switch { padding: 2px; gap: 2px; }
+      .view-switch button { padding: 5px 8px; font-size: 10px; }
     }
 
     .live-viz {
@@ -75,6 +93,20 @@
       position: absolute; inset: 0; width: 100%; height: 100%;
       border: none; display: block;
     }
+
+    /* Chart / Visualizer switcher, floating over the live pane */
+    .view-switch {
+      position: absolute; top: 8px; left: 8px; z-index: 5;
+      display: flex; gap: 4px; padding: 3px;
+      background: rgba(0,0,0,.55); border: 1px solid var(--border);
+      border-radius: 8px; backdrop-filter: blur(6px);
+    }
+    .view-switch button {
+      border: 0; border-radius: 6px; padding: 5px 10px;
+      font-size: 11px; font-weight: 600; color: var(--muted);
+      background: transparent; cursor: pointer;
+    }
+    .view-switch button.active { background: var(--accent); color: #08161d; }
 
     /* ── Live readings panel ─────────────────────────────────────────────── */
     .live-panel {
@@ -219,7 +251,11 @@
     <div class="live-pane">
 
       <div class="live-viz">
-        <iframe src="/viz?embed" title="Live Visualizer" allow="autoplay"></iframe>
+        <div class="view-switch" id="viewSwitch">
+          <button type="button" data-view="viz">Visualizer</button>
+          <button type="button" data-view="chart">Chart</button>
+        </div>
+        <iframe id="liveFrame" src="/viz?embed" title="Live view" allow="autoplay"></iframe>
       </div>
 
       <div class="live-panel">
@@ -321,6 +357,24 @@
       cx.fillStyle = COLORS[field];
       cx.fill();
     }
+
+    // ── View switcher (Chart ⇄ Visualizer in the live pane) ────────────────
+    const VIEW_KEY   = 'scion-dash-live-view';
+    const liveFrame  = document.getElementById('liveFrame');
+    const viewSwitch = document.getElementById('viewSwitch');
+
+    function setLiveView(view) {
+      liveFrame.src = view === 'chart' ? '/?embed' : '/viz?embed';
+      viewSwitch.querySelectorAll('button').forEach(b =>
+        b.classList.toggle('active', b.dataset.view === view));
+      try { localStorage.setItem(VIEW_KEY, view); } catch (_) {}
+    }
+    viewSwitch.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-view]');
+      if (btn) setLiveView(btn.dataset.view);
+    });
+    // Default 'viz' preserves today's hardcoded /viz?embed for anyone with no saved choice.
+    setLiveView(localStorage.getItem(VIEW_KEY) === 'chart' ? 'chart' : 'viz');
 
     // ── WebSocket ─────────────────────────────────────────────────────────
     const smooth = Object.fromEntries(FIELDS.map(f => [f, null]));

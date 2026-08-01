@@ -519,7 +519,7 @@ class PlantSignalVisualizer {
     const safeDt = Math.min(dt, 0.1);
 
     // Background
-    ctx.fillStyle = '#060c06';
+    ctx.fillStyle = window.scionCanvasBg;
     ctx.fillRect(0, 0, w, h);
 
     // Static dark plant structure
