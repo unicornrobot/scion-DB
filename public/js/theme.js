@@ -54,6 +54,17 @@
     if (!localStorage.getItem(KEY)) apply(e.matches ? 'light' : 'dark');
   });
 
+  // Same-origin documents (e.g. Dashboard's embedded Visualizer iframe)
+  // each read `scion-theme` once at load and have no other way to notice a
+  // later change — the `storage` event is the browser's built-in signal
+  // for exactly this: it fires on every OTHER same-origin document when
+  // localStorage changes (never on the document that made the change
+  // itself), so toggling the theme in one view updates every other one
+  // already open, live, with no reload required.
+  window.addEventListener('storage', (e) => {
+    if (e.key === KEY) apply(e.newValue || preferredTheme());
+  });
+
   window.ScionTheme = {
     toggle,
     setTheme,

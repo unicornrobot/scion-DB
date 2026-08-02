@@ -163,8 +163,12 @@ class SacredSpiralVisualizer {
     }
 
     // ── compose frame ──────────────────────────────────────────────────────
+    // Clears at the canvas's actual CURRENT size, not the cached w/h (which
+    // briefly lag behind right after an embedding iframe's own container
+    // settles) — otherwise the gap beyond w/h is left unpainted/transparent
+    // instead of showing the theme background.
     ctx.fillStyle = window.scionCanvasBg;
-    ctx.fillRect(0, 0, w, h);
+    ctx.fillRect(0, 0, ctx.canvas.clientWidth, ctx.canvas.clientHeight);
 
     this._drawSpiralGuide(ctx, cx, cy);
     ctx.drawImage(this._trail, 0, 0, w, h);

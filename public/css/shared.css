@@ -171,7 +171,12 @@ input[type=text], input[type=url], textarea, select {
 @media (max-width: 680px) {
   .scion-nav    { display: none; }
   .scion-tabbar { display: block; }
-  body { padding-bottom: calc(54px + env(safe-area-inset-bottom)); }
+  /* Scoped to body.scion-has-tabbar (set by nav.js only when it actually
+     renders the tab bar) rather than a bare `body` selector — otherwise an
+     embedded ?embed page (which deliberately renders no nav at all) still
+     matches this same viewport-width query and reserves space for a tab
+     bar that never appears, leaving a permanent unfillable gap. */
+  body.scion-has-tabbar { padding-bottom: calc(54px + env(safe-area-inset-bottom)); }
 }
 
 /* ── Native fullscreen helper ────────────────────────────────────────────

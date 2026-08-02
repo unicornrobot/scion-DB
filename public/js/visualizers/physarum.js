@@ -284,6 +284,14 @@ class PhysarumVisualizer {
     this._stepAgents(activity, safeDt);
     this._buildImageData();
 
+    // Full clear first, at the canvas's actual CURRENT size (not the
+    // cached this._w/_h, which briefly lag the real size right after an
+    // embedding iframe's own container finishes settling) — otherwise any
+    // gap between the trail image and the true canvas edge is left
+    // unpainted/transparent instead of showing the theme background.
+    ctx.fillStyle = window.scionCanvasBg;
+    ctx.fillRect(0, 0, ctx.canvas.clientWidth, ctx.canvas.clientHeight);
+
     // Blit at grid resolution, scale up to canvas — natural upscale blur
     // gives the strands a soft, glowing appearance for free.
     this._octx.putImageData(this._imageData, 0, 0);

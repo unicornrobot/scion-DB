@@ -20,6 +20,11 @@
   }
 
   function renderTabbar(current) {
+    // Marks <body> so shared.css's mobile breakpoint only reserves bottom
+    // padding for the tab bar when one is actually rendered — this function
+    // never runs at all in ?embed mode, so embedded pages correctly get no
+    // reserved space for a tab bar that was never going to appear there.
+    document.body.classList.add('scion-has-tabbar');
     if (document.querySelector('.scion-tabbar')) return;
     const bar = document.createElement('nav');
     bar.className = 'scion-tabbar';

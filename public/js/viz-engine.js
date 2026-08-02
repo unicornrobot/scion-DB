@@ -82,6 +82,22 @@ class VizEngine {
     this._active = this._registry.get(name);
     this._applyDPR(); // re-applies ctx.scale(dpr,dpr) after transform reset
     this._active?.setup?.(this.ctx, this.state, this);
+
+    // Defensive re-check: when embedded in an iframe whose own container is
+    // still settling its final size (e.g. a host page computing height from
+    // a just-measured width), the canvas can report a stale clientWidth/
+    // clientHeight at the exact moment setup() runs, baking visualizer
+    // geometry (e.g. Plant Signal's root position) into the wrong size.
+    // A single next-frame re-check isn't always enough — mobile layout
+    // (address bar/viewport settling, slower reflow) can take a few frames
+    // longer — so keep forcing a resize pass for several frames after
+    // activation to reliably land on the final, correct size.
+    let framesLeft = 15;
+    const recheck = () => {
+      this._applyDPR(true);
+      if (--framesLeft > 0) requestAnimationFrame(recheck);
+    };
+    requestAnimationFrame(recheck);
   }
 
   // ── Render loop ──────────────────────────────────────────────────────────
@@ -107,11 +123,11 @@ class VizEngine {
     new ResizeObserver(() => this._applyDPR()).observe(this.canvas);
   }
 
-  _applyDPR() {
+  _applyDPR(force = false) {
     const dpr = window.devicePixelRatio || 1;
     const W   = Math.floor(this.canvas.clientWidth  * dpr);
     const H   = Math.floor(this.canvas.clientHeight * dpr);
-    const changed = this.canvas.width !== W || this.canvas.height !== H;
+    const changed = force || this.canvas.width !== W || this.canvas.height !== H;
     if (changed) {
       this.canvas.width  = W;
       this.canvas.height = H;

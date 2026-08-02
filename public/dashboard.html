@@ -7,6 +7,7 @@
   <script src="/js/theme.js"></script>
   <link rel="stylesheet" href="/css/shared.css" />
   <script src="/js/nav.js"></script>
+  <script src="/js/fullscreen.js"></script>
   <style>
     :root {
       /* Dashboard keeps its own green "plant" palette; --accent/--ok match
@@ -36,7 +37,7 @@
     }
     * { margin: 0; padding: 0; }
     html { font: 13px/1.5 -apple-system,"Segoe UI",system-ui,sans-serif; }
-    body { background: var(--bg); color: var(--fg); min-height: 100vh; }
+    body { background: var(--bg); color: var(--fg); min-height: 100vh; overflow-x: hidden; }
 
     /* ── Header ──────────────────────────────────────────────────────────── */
     header {
@@ -47,12 +48,20 @@
       position: sticky; top: 0; z-index: 100;
       backdrop-filter: blur(10px);
     }
+    .hdr-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
     .hdr-brand {
       font-size: 13px; font-weight: 600; letter-spacing: .4px;
-      color: var(--fg);
+      color: var(--fg); white-space: nowrap;
     }
     .hdr-brand span { color: var(--plant-l); }
-    .hdr-conn { display: flex; align-items: center; gap: 7px; }
+    .hdr-btn {
+      width: 28px; height: 28px; padding: 0; flex-shrink: 0;
+      background: transparent; border: 1px solid var(--border); color: var(--muted);
+      border-radius: 6px; font-size: 15px; line-height: 1; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .hdr-btn:hover { color: var(--fg); border-color: var(--muted); }
+    .hdr-conn { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
     .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; transition: background .4s; }
     .dot.live { background: var(--ok); box-shadow: 0 0 5px var(--ok); }
     .conn-label { font-size: 11px; color: var(--muted); }
@@ -67,50 +76,50 @@
     }
 
     /* ── Live pane ───────────────────────────────────────────────────────── */
+    /* Always a single full-width column — the readings panel below the live
+       view spans the whole page width rather than being squeezed into a
+       narrow fixed side column. */
     .live-pane {
       display: grid;
-      grid-template-columns: 1fr 280px;
+      grid-template-columns: 1fr;
       gap: 16px;
       margin-bottom: 36px;
     }
-    @media (max-width: 900px) {
-      .live-pane { grid-template-columns: 1fr; }
-      .live-viz  { aspect-ratio: 16/9; min-height: 0; }
-    }
     @media (max-width: 480px) {
       .page { padding: 16px 16px 32px; }
-      .view-switch { padding: 2px; gap: 2px; }
-      .view-switch button { padding: 5px 8px; font-size: 10px; }
+      header { padding: 0 16px; }
+      .hdr-conn .conn-label { display: none; }
+      .viz-picker select { padding: 4px 6px; font-size: 10px; }
     }
 
     .live-viz {
       position: relative; border-radius: 10px; overflow: hidden;
-      border: 1px solid var(--border); background: #000;
+      border: 1px solid var(--border); background: var(--panel);
       box-shadow: var(--card-glow);
-      min-height: 320px;
+      /* Height is set explicitly in JS (see sizeLiveViz below) from the
+         box's own measured width — sidesteps any aspect-ratio/padding-hack
+         ambiguity entirely and guarantees the iframe has a definite,
+         correct pixel height to fill. */
+      width: 100%; min-width: 0;
     }
     .live-viz iframe {
       position: absolute; inset: 0; width: 100%; height: 100%;
       border: none; display: block;
     }
 
-    /* Chart / Visualizer switcher, floating over the live pane */
-    .view-switch {
-      position: absolute; top: 8px; left: 8px; z-index: 5;
-      display: flex; gap: 4px; padding: 3px;
-      background: rgba(0,0,0,.55); border: 1px solid var(--border);
-      border-radius: 8px; backdrop-filter: blur(6px);
+    /* Visualizer picker, in the header next to the title — chooses which of
+       the four visualizers (Plant Signal / Mycelium / Spiral / Tapestry)
+       shows in the embedded live preview. */
+    .viz-picker { flex-shrink: 1; min-width: 0; }
+    .viz-picker select {
+      border: 1px solid var(--border); border-radius: 6px; padding: 5px 8px;
+      font-size: 11px; font-weight: 600; color: var(--fg);
+      background: var(--panel-2); cursor: pointer;
     }
-    .view-switch button {
-      border: 0; border-radius: 6px; padding: 5px 10px;
-      font-size: 11px; font-weight: 600; color: var(--muted);
-      background: transparent; cursor: pointer;
-    }
-    .view-switch button.active { background: var(--accent); color: #08161d; }
 
     /* ── Live readings panel ─────────────────────────────────────────────── */
     .live-panel {
-      display: flex; flex-direction: column; gap: 12px;
+      display: flex; flex-direction: column; gap: 12px; min-width: 0;
     }
     .live-readings {
       background: var(--panel); border: 1px solid var(--border);
@@ -142,7 +151,11 @@
     .spark-row:last-child { margin-bottom: 0; }
     .spark-field { font-size: 10px; color: var(--muted); font-family: var(--mono); }
     .spark-val   { font-size: 10px; color: var(--fg); font-family: var(--mono); text-align: right; }
-    .spark-canvas { display: block; width: 100%; height: 28px; }
+    /* min-width:0 overrides the grid item's default content-based minimum
+       size — without it, a <canvas>'s intrinsic width (300px by default,
+       or its device-pixel-scaled drawing-buffer width once JS sets it)
+       forces the 1fr track wider than the viewport on narrow phones. */
+    .spark-canvas { display: block; width: 100%; height: 28px; min-width: 0; }
 
     /* ── Gallery ─────────────────────────────────────────────────────────── */
     .gallery-header {
@@ -236,7 +249,18 @@
 <body>
 
   <header>
-    <div class="hdr-brand">Scion · <span>Dashboard</span></div>
+    <div class="hdr-left">
+      <div class="hdr-brand">Scion · <span>Dashboard</span></div>
+      <div class="viz-picker">
+        <select id="vizSelect">
+          <option value="plant">Plant Signal</option>
+          <option value="organic">Mycelium</option>
+          <option value="sacred">Spiral</option>
+          <option value="tapestry">Tapestry</option>
+        </select>
+      </div>
+      <button type="button" class="hdr-btn" id="fsBtn" title="Fullscreen (F)">⛶</button>
+    </div>
     <div class="hdr-conn">
       <span class="dot" id="connDot"></span>
       <span class="conn-label" id="connLabel">connecting…</span>
@@ -251,11 +275,10 @@
     <div class="live-pane">
 
       <div class="live-viz">
-        <div class="view-switch" id="viewSwitch">
-          <button type="button" data-view="viz">Visualizer</button>
-          <button type="button" data-view="chart">Chart</button>
-        </div>
-        <iframe id="liveFrame" src="/viz?embed" title="Live view" allow="autoplay"></iframe>
+        <!-- No src here on purpose: it's set by JS only after .live-viz has
+             its final measured height, so the Visualizer page never loads
+             (and bakes in canvas geometry) against a not-yet-sized box. -->
+        <iframe id="liveFrame" title="Live view" allow="autoplay"></iframe>
       </div>
 
       <div class="live-panel">
@@ -317,6 +340,18 @@
     }
     buildSparkRows();
 
+    // ── Live-viz sizing ─────────────────────────────────────────────────────
+    // Set an explicit pixel height from the box's own measured width (16:9),
+    // instead of relying on CSS aspect-ratio/padding-hack techniques, so the
+    // embedded iframe always has an unambiguous, definite height to fill.
+    const liveViz = document.querySelector('.live-viz');
+    function sizeLiveViz() {
+      const w = liveViz.clientWidth;
+      if (w > 0) liveViz.style.height = Math.round(w * 9 / 16) + 'px';
+    }
+    new ResizeObserver(sizeLiveViz).observe(liveViz);
+    sizeLiveViz();
+
     function drawSpark(field, smooth) {
       const sc = sparkCtxs[field];
       if (!sc) return;
@@ -358,23 +393,33 @@
       cx.fill();
     }
 
-    // ── View switcher (Chart ⇄ Visualizer in the live pane) ────────────────
-    const VIEW_KEY   = 'scion-dash-live-view';
+    // ── Visualizer picker (which viz shows in the live pane) ───────────────
+    // Same localStorage key the standalone Visualizer page itself reads/
+    // writes ('scion-active-viz'), so picking one here also updates what
+    // you'd see if you open /viz directly, and vice versa.
+    const VIZ_KEY    = 'scion-active-viz';
+    const VIZ_VALUES = ['plant', 'organic', 'sacred', 'tapestry'];
     const liveFrame  = document.getElementById('liveFrame');
-    const viewSwitch = document.getElementById('viewSwitch');
+    const vizSelect  = document.getElementById('vizSelect');
 
-    function setLiveView(view) {
-      liveFrame.src = view === 'chart' ? '/?embed' : '/viz?embed';
-      viewSwitch.querySelectorAll('button').forEach(b =>
-        b.classList.toggle('active', b.dataset.view === view));
-      try { localStorage.setItem(VIEW_KEY, view); } catch (_) {}
+    function setLiveViz(viz) {
+      liveFrame.src = `/viz?embed&viz=${viz}`;
+      try { localStorage.setItem(VIZ_KEY, viz); } catch (_) {}
     }
-    viewSwitch.addEventListener('click', (e) => {
-      const btn = e.target.closest('button[data-view]');
-      if (btn) setLiveView(btn.dataset.view);
-    });
-    // Default 'viz' preserves today's hardcoded /viz?embed for anyone with no saved choice.
-    setLiveView(localStorage.getItem(VIEW_KEY) === 'chart' ? 'chart' : 'viz');
+    vizSelect.addEventListener('change', () => setLiveViz(vizSelect.value));
+
+    let savedViz = null;
+    try { savedViz = localStorage.getItem(VIZ_KEY); } catch (_) {}
+    const initialViz = VIZ_VALUES.includes(savedViz) ? savedViz : 'sacred';
+    vizSelect.value = initialViz;
+    setLiveViz(initialViz);
+
+    // ── Fullscreen ──────────────────────────────────────────────────────────
+    // Targets the whole document, not just .live-viz: the Fullscreen API only
+    // keeps the target element (and its descendants) visible/interactive —
+    // #fsBtn lives in <header>, a sibling of .live-viz, so scoping fullscreen
+    // to .live-viz would hide the very button needed to exit it again.
+    initFullscreen(document.getElementById('fsBtn'));
 
     // ── WebSocket ─────────────────────────────────────────────────────────
     const smooth = Object.fromEntries(FIELDS.map(f => [f, null]));

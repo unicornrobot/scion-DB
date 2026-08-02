@@ -672,8 +672,12 @@
       setViz(e.target.value);
     });
 
-    // Restore saved viz on load
-    const savedViz = localStorage.getItem('scion-active-viz');
+    // Restore saved viz on load. A `?viz=` param (used by Dashboard's embed
+    // picker) takes priority over localStorage and is also written back to
+    // it, so the standalone Visualizer page and Dashboard's live preview
+    // stay in sync with whichever was picked most recently.
+    const urlViz  = new URLSearchParams(location.search).get('viz');
+    const savedViz = urlViz || localStorage.getItem('scion-active-viz');
     if (savedViz && document.querySelector(`#vizPicker option[value="${savedViz}"]`)) {
       document.getElementById('vizPicker').value = savedViz;
       setViz(savedViz);
@@ -1234,7 +1238,7 @@
 
     // ── Embed mode ────────────────────────────────────────────────────────
     if (new URLSearchParams(location.search).has('embed')) {
-      ['sidebarToggle', 'sidebar', 'readoutWrap', 'audioPlayer'].forEach(id => {
+      ['sidebarToggle', 'sidebar', 'readoutWrap', 'audioPlayer', 'fsBtn'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
       });

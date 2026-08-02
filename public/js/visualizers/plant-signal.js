@@ -518,9 +518,12 @@ class PlantSignalVisualizer {
 
     const safeDt = Math.min(dt, 0.1);
 
-    // Background
+    // Background — clears at the canvas's actual CURRENT size, not the
+    // cached w/h (which briefly lag behind right after an embedding
+    // iframe's own container settles), so the gap beyond w/h always shows
+    // the theme background rather than being left unpainted/transparent.
     ctx.fillStyle = window.scionCanvasBg;
-    ctx.fillRect(0, 0, w, h);
+    ctx.fillRect(0, 0, ctx.canvas.clientWidth, ctx.canvas.clientHeight);
 
     // Static dark plant structure
     if (this.showVeins) ctx.drawImage(this._plantCanvas, 0, 0);
