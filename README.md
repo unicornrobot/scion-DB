@@ -48,12 +48,8 @@ Pocket Scion (UDP/OSC)
   - **Spiral** — change-driven Archimedean spiral with radial spark lines scaled to data amplitude
   - **Plant Signal** — a generative curved plant with electrical action-potential pulses travelling from the root out through every branch fand leaf
   - **Mycelium** — a Physarum (slime-mould) agent simulation that self-organises into glowing flow networks
-<<<<<<< HEAD
   - **Tapestry** — a data loom: six coloured threads weave downward row by row, each thread's horizontal position tracking its field's value relative to its recent range
 - **Session recording** — writes to InfluxDB v2 with per-session tagging; playback in the chart view
-=======
-c- **Session recording** — writes to InfluxDB v2 with per-session tagging; playback in the chart view
->>>>>>> 138c86a (fullscreens)
 - **Cloud relay** — thin WebSocket fan-out server; deploy once to Railway, share a URL with anyone
 
 ---
@@ -107,6 +103,44 @@ npm start
 ```
 
 Open **http://localhost:3000** for the live chart, or **http://localhost:3000/viz** for the geometry visualiser.
+
+---
+
+## Updating
+
+Pull the latest changes, then restart the process so the new code actually takes effect:
+
+```bash
+cd /path/to/scion-DB
+git status              # confirm you don't have local changes you want to keep
+git pull origin main
+```
+
+If `git status` shows unstaged changes or untracked files you don't want, discard them before pulling:
+
+```bash
+git clean -fdn           # preview which untracked files would be removed (deletes nothing yet)
+git restore .            # discard changes to tracked files
+git clean -fd            # remove untracked files — respects .gitignore, so .env/data/ are safe
+```
+
+The server runs as a plain `node` process rather than a service, so picking up the update means stopping the old process and starting a new one:
+
+```bash
+# Find the running process
+ps aux | grep "node server"
+
+# Stop it (replace <PID> with the number from the command above)
+kill <PID>
+
+# Start it again
+npm start
+
+# ...or, to keep it running after you close the terminal/SSH session:
+nohup npm start > scion.log 2>&1 &
+```
+
+Having to find and kill a PID every time gets old fast — see [Running as a service on Linux](#running-as-a-service-on-linux) below if you'd rather just run `sudo systemctl restart scion` after each pull.
 
 ---
 
