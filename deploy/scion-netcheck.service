@@ -1,0 +1,14 @@
+[Unit]
+Description=Scion Wi-Fi fallback check (join known network, else start hotspot)
+After=NetworkManager.service
+Wants=NetworkManager-wait-online.service
+After=NetworkManager-wait-online.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+EnvironmentFile=/etc/scion/network.env
+ExecStart=/usr/local/sbin/scion-netcheck.sh
+
+[Install]
+WantedBy=multi-user.target

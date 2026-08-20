@@ -417,3 +417,54 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now scion
 sudo systemctl status scion
 ```
+
+---
+
+## Raspberry Pi deployment — Wi-Fi with hotspot fallback
+
+For field use (recording a plant with no known Wi-Fi around), the Pi can join
+a known local network automatically when in range and otherwise broadcast
+its own hotspot, so a phone or laptop can still reach the dashboard. This
+targets Raspberry Pi OS with **NetworkManager** (the default since Bookworm,
+including Trixie).
+
+Once the hotspot is running, if the home network comes back in range it
+**stays on the hotspot** until the Pi (or the fallback service) is restarted
+— it does not automatically switch back mid-session.
+
+### Setup
+
+```bash
+cd deploy
+cp network.env.example network.env
+nano network.env       # set HOME_WIFI_SSID/PASSWORD, HOTSPOT_SSID/PASSWORD
+sudo bash pi-network-setup.sh
+sudo reboot
+```
+
+This creates two `nmcli` connection profiles — `scion-home` (your known
+network, tried first) and `scion-hotspot` (AP mode, tried if `scion-home`
+isn't found within `FALLBACK_TIMEOUT` seconds) — and installs a
+`scion-netcheck` systemd service that makes the join-or-fallback decision
+once at every boot. Re-running `pi-network-setup.sh` is safe; it updates the
+existing profiles in place.
+
+### Reaching the dashboard
+
+| Situation | URL |
+|---|---|
+| On the home network | `http://raspberrypi.local:3000` (via Raspberry Pi OS's bundled `avahi-daemon`), or the Pi's LAN IP |
+| Connected to the hotspot | `http://10.42.0.1:3000` (NetworkManager's fixed address for shared IPv4) |
+
+### Checking / forcing network state
+
+```bash
+nmcli connection show --active     # which profile is active right now
+journalctl -u scion-netcheck       # what the boot-time check decided, and why
+
+sudo nmcli connection up scion-hotspot   # force hotspot mode now
+sudo nmcli connection up scion-home      # force a reconnect attempt now
+```
+
+To change Wi-Fi credentials later, edit `/etc/scion/network.env` and re-run
+`pi-network-setup.sh` (or `nmcli connection modify scion-home wifi-sec.psk "new-password"` directly).
