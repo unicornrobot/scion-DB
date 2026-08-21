@@ -99,12 +99,23 @@ class SacredSpiralVisualizer {
     return Math.min(this._w, this._h) * 0.015;
   }
 
+  // Dot/stroke sizes in _appendPt() are tuned by feel at a reference ring
+  // spacing of 12px (≈ a typical desktop viewport). Scaling them by this
+  // factor keeps the artwork's proportions consistent whether it's rendered
+  // into a tiny gallery thumbnail or a large canvas — without it, dots that
+  // look right at desktop size read as oversized blobs on a small canvas
+  // (ring spacing shrinks with canvas size, but a fixed pixel radius doesn't).
+  _sizeScale() {
+    return this._ringSpacing() / 12;
+  }
+
   // Maximum safe spiral radius: accounts for MIN_SPARK floor, full spark length
-  // at current scale, max point radius (4.5 px), and a 10 px safety margin so
-  // nothing clips the canvas edge regardless of normalised value.
+  // at current scale, max point radius, and a safety margin so nothing clips
+  // the canvas edge regardless of normalised value. The margin scales with
+  // _sizeScale() for the same reason point/stroke sizes do.
   _maxR() {
     const s = this._ringSpacing();
-    const maxSpark = s * 0.3 + s * 3 * this.sparkScale + 4.5 + 10;
+    const maxSpark = s * 0.3 + s * 3 * this.sparkScale + (4.5 + 10) * this._sizeScale();
     return Math.min(this._w, this._h) * 0.5 - maxSpark;
   }
 
@@ -121,45 +132,10 @@ class SacredSpiralVisualizer {
     if (!w || !h || !this._trail) return;
 
     const cx = w * 0.5, cy = h * 0.5;
-    const sm = state.smooth;
-
-    // ── change detection ───────────────────────────────────────────────────
-    const prevVal    = this._prevSmooth[this.watchField] ?? sm[this.watchField] ?? 0;
-    this._changeMag  = Math.abs((sm[this.watchField] ?? 0) - prevVal);
-
-    // EMA over ~7 frames bridges the gap between OSC sample rate (≈10 Hz) and
-    // render rate (60 fps) — without it, 5 of every 6 frames have changeMag=0
-    // and subtle signals look flat.
-    this._changeEma  = this._changeEma * 0.85 + this._changeMag * 0.15;
-
-    // Peak decays at ~30 %/s so it re-calibrates within a few seconds when the
-    // signal shifts from an active range to a subtle one.
-    this._changePeak = Math.max(this._changePeak * 0.99, this._changeEma, 0.0001);
-    this._normChange = this._changeEma / this._changePeak;  // 0-1
-    const moving     = this._normChange > this.sensitivity;
-
-    // Always snapshot smooth for next frame
-    const FIELDS = ['min', 'max', 'mean', 'delta', 'variance', 'deviation'];
-    for (const f of FIELDS) this._prevSmooth[f] = sm[f];
+    const moving = this._detectMovement(state.smooth);
 
     if (moving) {
-      // Advance by a fixed arc length so mark spacing stays constant at all radii.
-      // Dividing by r means the angle step shrinks as the spiral widens —
-      // each outer ring naturally takes longer to complete.
-      const r          = 10 + (this._ringSpacing() * this._angle) / (Math.PI * 2);
-      this._angle     += (2.0 / Math.max(r, 1)) * dt * 60;
-
-      // Edge wrap: when tip hits the boundary, restart from centre without
-      // clearing the trail so new rings layer silently over old ones.
-      if (r > this._maxR()) {
-        this._angle  = 0;
-        this._lastPt = null;    // break the line — don't draw edge-to-centre
-        // Pick a new random palette each time the spiral wraps
-        const keys = Object.keys(SACRED_PALETTES);
-        this.palette = keys[Math.floor(Math.random() * keys.length)];
-      }
-
-      this._appendPt(cx, cy, state);
+      this._advanceAndDraw(cx, cy, dt, state);
     }
 
     // ── compose frame ──────────────────────────────────────────────────────
@@ -176,6 +152,52 @@ class SacredSpiralVisualizer {
     const tip    = this._spiralPt(cx, cy, this._angle);
     const dotPos = (!this.showRings && this._sparkTip) ? this._sparkTip : tip;
     this._drawTip(ctx, dotPos.x, dotPos.y, moving);
+  }
+
+  // ── Change detection ─────────────────────────────────────────────────────
+  // Shared by render() (live, per-frame) and replay() (headless, per-sample):
+  // EMA of the watched field's change, normalised against a decaying running
+  // peak, gated by sensitivity. Also rolls _prevSmooth forward for next call.
+  _detectMovement(sm) {
+    const prevVal = this._prevSmooth[this.watchField] ?? sm[this.watchField] ?? 0;
+    this._changeMag = Math.abs((sm[this.watchField] ?? 0) - prevVal);
+
+    // EMA over ~7 frames bridges the gap between OSC sample rate (≈10 Hz) and
+    // render rate (60 fps) — without it, 5 of every 6 frames have changeMag=0
+    // and subtle signals look flat.
+    this._changeEma = this._changeEma * 0.85 + this._changeMag * 0.15;
+
+    // Peak decays at ~30 %/s so it re-calibrates within a few seconds when the
+    // signal shifts from an active range to a subtle one.
+    this._changePeak = Math.max(this._changePeak * 0.99, this._changeEma, 0.0001);
+    this._normChange = this._changeEma / this._changePeak; // 0-1
+    const moving = this._normChange > this.sensitivity;
+
+    const FIELDS = ['min', 'max', 'mean', 'delta', 'variance', 'deviation'];
+    for (const f of FIELDS) this._prevSmooth[f] = sm[f];
+    return moving;
+  }
+
+  // ── Spiral advance ───────────────────────────────────────────────────────
+  // Shared by render() and replay(): advances the angle by a fixed arc
+  // length (scaled by _sizeScale() so the spiral's overall extent — not just
+  // its dot/stroke sizes — looks the same proportion of the canvas at any
+  // canvas size), handles edge-wrap/repalette, then draws the new segment.
+  _advanceAndDraw(cx, cy, dt, state) {
+    const r      = 10 + (this._ringSpacing() * this._angle) / (Math.PI * 2);
+    this._angle += (2.0 * this._sizeScale() / Math.max(r, 1)) * dt * 60;
+
+    // Edge wrap: when tip hits the boundary, restart from centre without
+    // clearing the trail so new rings layer silently over old ones.
+    if (r > this._maxR()) {
+      this._angle  = 0;
+      this._lastPt = null;    // break the line — don't draw edge-to-centre
+      // Pick a new random palette each time the spiral wraps
+      const keys = Object.keys(SACRED_PALETTES);
+      this.palette = keys[Math.floor(Math.random() * keys.length)];
+    }
+
+    this._appendPt(cx, cy, state);
   }
 
   // ── Trail appending ────────────────────────────────────────────────────────
@@ -210,6 +232,7 @@ class SacredSpiralVisualizer {
       if (dx * dx + dy * dy < 0.5) return;
 
       const tc = this._tc;
+      const sizeScale = this._sizeScale();
 
       // Opacity maps directly to signal strength, scaled by sparkOpacity.
       const alpha = Math.pow(normalised, 0.6) * this.sparkOpacity;
@@ -220,7 +243,7 @@ class SacredSpiralVisualizer {
         tc.moveTo(this._lastPt.x, this._lastPt.y);
         tc.lineTo(pos.x, pos.y);
         tc.strokeStyle = this._palColor(normalised, alpha);
-        tc.lineWidth   = 0.3 + normalised * 1.2;
+        tc.lineWidth   = (0.3 + normalised * 1.2) * sizeScale;
         tc.lineJoin    = tc.lineCap = 'round';
         tc.stroke();
       }
@@ -235,12 +258,12 @@ class SacredSpiralVisualizer {
       const color     = this._palColor(normalised, alpha);
 
       if (this.sparkStyle === 'points') {
-        const r = 1.0 + normalised * 2.0;
+        const r = (1.0 + normalised * 2.0) * sizeScale;
         tc.beginPath();
         tc.arc(tipX, tipY, r, 0, Math.PI * 2);
         if (this.pointStyle === 'stroke') {
           tc.strokeStyle = color;
-          tc.lineWidth   = 0.3 + normalised * 0.7;
+          tc.lineWidth   = (0.3 + normalised * 0.7) * sizeScale;
           tc.stroke();
         } else {
           tc.fillStyle = color;
@@ -251,7 +274,7 @@ class SacredSpiralVisualizer {
         tc.moveTo(pos.x, pos.y);
         tc.lineTo(tipX, tipY);
         tc.strokeStyle = color;
-        tc.lineWidth   = 0.3 + normalised * 1.0;
+        tc.lineWidth   = (0.3 + normalised * 1.0) * sizeScale;
         tc.lineCap     = 'round';
         tc.stroke();
       }
@@ -310,30 +333,8 @@ class SacredSpiralVisualizer {
       if (state.smooth[ev.field] == null) state.smooth[ev.field] = ev.value;
       else state.smooth[ev.field] += 0.12 * (ev.value - state.smooth[ev.field]);
 
-      // ── change detection (identical formula to render()) ─────────────────
-      const sm       = state.smooth;
-      const prevVal  = this._prevSmooth[this.watchField] ?? sm[this.watchField] ?? 0;
-      this._changeMag = Math.abs((sm[this.watchField] ?? 0) - prevVal);
-      this._changeEma = this._changeEma * 0.85 + this._changeMag * 0.15;
-      this._changePeak = Math.max(this._changePeak * 0.99, this._changeEma, 0.0001);
-      this._normChange = this._changeEma / this._changePeak;
-      const moving = this._normChange > this.sensitivity;
-
-      for (const f of FIELDS) this._prevSmooth[f] = sm[f];
-
-      if (moving) {
-        const r = 10 + (this._ringSpacing() * this._angle) / (Math.PI * 2);
-        this._angle += (2.0 / Math.max(r, 1)) * dt * 60;
-
-        if (r > this._maxR()) {
-          this._angle  = 0;
-          this._lastPt = null;
-          const keys = Object.keys(SACRED_PALETTES);
-          this.palette = keys[Math.floor(Math.random() * keys.length)];
-        }
-
-        this._appendPt(cx, cy, state);
-      }
+      const moving = this._detectMovement(state.smooth);
+      if (moving) this._advanceAndDraw(cx, cy, dt, state);
     }
 
     // ── compose the final static image ──────────────────────────────────────
