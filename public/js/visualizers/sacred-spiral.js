@@ -274,6 +274,80 @@ class SacredSpiralVisualizer {
     ctx.fill();
   }
 
+  // ── Headless reconstruction ────────────────────────────────────────────────
+  // Replays a full recorded session (the `series` shape returned by
+  // GET /api/sessions/:name — { field: [{x,y}, ...] } ) through the same
+  // change-detection + drawing logic render()/_appendPt() use live, and
+  // returns a canvas showing the final trail: what the spiral would look
+  // like at the end of that recording. There's no engine/RAF/WebSocket here,
+  // so each stored sample stands in for one "frame", in arrival order.
+  replay(w, h, series) {
+    this._w = w;
+    this._h = h;
+    this._initTrail(w, h);
+
+    const cx = w * 0.5, cy = h * 0.5;
+    const FIELDS = ['min', 'max', 'mean', 'delta', 'variance', 'deviation'];
+
+    // Merge all fields' independently-timestamped samples into one
+    // chronological event stream.
+    const events = [];
+    for (const f of FIELDS) {
+      for (const pt of series[f] || []) events.push({ t: pt.x, field: f, value: pt.y });
+    }
+    events.sort((a, b) => a.t - b.t);
+    if (!events.length) return this._trail;
+
+    const state = { smooth: {} };
+    for (const f of FIELDS) state[f] = null;
+    let lastT = events[0].t;
+
+    for (const ev of events) {
+      const dt = Math.min((ev.t - lastT) / 1000, 0.1);
+      lastT = ev.t;
+
+      state[ev.field] = ev.value;
+      if (state.smooth[ev.field] == null) state.smooth[ev.field] = ev.value;
+      else state.smooth[ev.field] += 0.12 * (ev.value - state.smooth[ev.field]);
+
+      // ── change detection (identical formula to render()) ─────────────────
+      const sm       = state.smooth;
+      const prevVal  = this._prevSmooth[this.watchField] ?? sm[this.watchField] ?? 0;
+      this._changeMag = Math.abs((sm[this.watchField] ?? 0) - prevVal);
+      this._changeEma = this._changeEma * 0.85 + this._changeMag * 0.15;
+      this._changePeak = Math.max(this._changePeak * 0.99, this._changeEma, 0.0001);
+      this._normChange = this._changeEma / this._changePeak;
+      const moving = this._normChange > this.sensitivity;
+
+      for (const f of FIELDS) this._prevSmooth[f] = sm[f];
+
+      if (moving) {
+        const r = 10 + (this._ringSpacing() * this._angle) / (Math.PI * 2);
+        this._angle += (2.0 / Math.max(r, 1)) * dt * 60;
+
+        if (r > this._maxR()) {
+          this._angle  = 0;
+          this._lastPt = null;
+          const keys = Object.keys(SACRED_PALETTES);
+          this.palette = keys[Math.floor(Math.random() * keys.length)];
+        }
+
+        this._appendPt(cx, cy, state);
+      }
+    }
+
+    // ── compose the final static image ──────────────────────────────────────
+    const out = document.createElement('canvas');
+    out.width  = w;
+    out.height = h;
+    const octx = out.getContext('2d');
+    octx.fillStyle = '#0e1014';
+    octx.fillRect(0, 0, w, h);
+    this._drawSpiralGuide(octx, cx, cy);
+    octx.drawImage(this._trail, 0, 0, w, h);
+    return out;
+  }
+
   // ── Spiral path guide ─────────────────────────────────────────────────────
   // Draws the complete Archimedean spiral track from centre to edge as a faint
   // ghost line, so the full path the dot follows is always visible.

@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/css/shared.css" />
   <script src="/js/nav.js"></script>
   <script src="/js/fullscreen.js"></script>
+  <script src="/js/visualizers/sacred-spiral.js"></script>
   <style>
     :root {
       /* Dashboard keeps its own green "plant" palette; --accent/--ok match
@@ -534,49 +535,61 @@
       return n >= 1000 ? (n / 1000).toFixed(1) + 'k pts' : n + ' pts';
     }
 
-    // Draw a tiny placeholder sparkline from session data
-    async function drawPlaceholder(canvas, sessionName) {
+    // Dark placeholder for sessions with no recorded data points.
+    function drawNoData(canvas) {
+      const dpr = window.devicePixelRatio || 1;
+      const w = canvas.offsetWidth || 240, h = canvas.offsetHeight || 135;
+      canvas.width  = Math.round(w * dpr);
+      canvas.height = Math.round(h * dpr);
+      const cx = canvas.getContext('2d');
+      cx.scale(dpr, dpr);
+      cx.fillStyle = '#0e1014';
+      cx.fillRect(0, 0, w, h);
+      cx.fillStyle = 'rgba(216,230,218,0.35)';
+      cx.font = '11px -apple-system,"Segoe UI",system-ui,sans-serif';
+      cx.textAlign = 'center';
+      cx.textBaseline = 'middle';
+      cx.fillText('no data', w / 2, h / 2);
+    }
+
+    // Reconstructs the Spiral visualization from a session's saved data —
+    // replaying the same change-detection + drawing logic the live view
+    // uses (SacredSpiralVisualizer.replay()) — draws it into the card
+    // immediately, then caches it as that session's snapshot via the
+    // existing endpoints so future dashboard loads skip straight to the
+    // cached PNG instead of recomputing.
+    async function reconstructSpiral(canvas, sessionName) {
+      const dpr = window.devicePixelRatio || 1;
+      const w = Math.round((canvas.offsetWidth || 240) * dpr);
+      const h = Math.round((canvas.offsetHeight || 135) * dpr);
+
+      const data = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}?maxPoints=4000`).then(r => r.json());
+      const series = data.series || {};
+      const hasData = Object.values(series).some(arr => arr && arr.length);
+      if (!hasData) {
+        drawNoData(canvas);
+        return;
+      }
+
+      const out = new SacredSpiralVisualizer().replay(w, h, series);
+      canvas.width  = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(out, 0, 0);
+
+      if (isRelay) return; // don't upload snapshots for someone else's recordings
+
       try {
-        const data = await fetch(`/api/sessions/${encodeURIComponent(sessionName)}?maxPoints=200`).then(r => r.json());
-        const series = data.series?.mean || data.series?.deviation || [];
-        if (series.length < 2) return;
-
-        const dpr = window.devicePixelRatio || 1;
-        const w = canvas.offsetWidth || 240;
-        const h = canvas.offsetHeight || 135;
-        canvas.width  = Math.round(w * dpr);
-        canvas.height = Math.round(h * dpr);
-        const cx = canvas.getContext('2d');
-        cx.scale(dpr, dpr);
-
-        let lo = Infinity, hi = -Infinity;
-        for (const pt of series) { if (pt.y < lo) lo = pt.y; if (pt.y > hi) hi = pt.y; }
-        const span = hi - lo || 1;
-        const pad  = 4;
-        const iH   = h - pad * 2;
-        const xp   = i => (i / (series.length - 1)) * w;
-        const yp   = v => pad + iH - ((v - lo) / span) * iH;
-
-        cx.fillStyle = '#060e09';
-        cx.fillRect(0, 0, w, h);
-
-        cx.beginPath();
-        cx.moveTo(xp(0), h);
-        for (let i = 0; i < series.length; i++) cx.lineTo(xp(i), yp(series[i].y));
-        cx.lineTo(xp(series.length - 1), h);
-        cx.closePath();
-        cx.fillStyle = 'rgba(58,125,68,.30)';
-        cx.fill();
-
-        cx.beginPath();
-        for (let i = 0; i < series.length; i++) {
-          const px = xp(i), py = yp(series[i].y);
-          i === 0 ? cx.moveTo(px, py) : cx.lineTo(px, py);
-        }
-        cx.strokeStyle = 'rgba(106,184,122,.80)';
-        cx.lineWidth = 1.5;
-        cx.lineJoin = cx.lineCap = 'round';
-        cx.stroke();
+        const safe = encodeURIComponent(sessionName);
+        await fetch(`/api/sessions/${safe}/snapshot`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dataUrl: out.toDataURL('image/png') }),
+        });
+        await fetch(`/api/sessions/${safe}/meta`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reconstructed: true }),
+        });
       } catch (_) {}
     }
 
@@ -593,10 +606,10 @@
 
         const grid = document.createElement('div');
         grid.className = 'card-grid';
+        const needsReconstruct = [];
 
         for (const s of sessions) {
           const plant = s.plant || {};
-          const hasSnap = s.hasSnapshot;
           const safeName = s.session.replace(/[^a-zA-Z0-9_\-]/g, '_');
 
           const card = document.createElement('div');
@@ -605,18 +618,17 @@
           const thumb = document.createElement('div');
           thumb.className = 'card-thumb';
 
-          if (hasSnap) {
+          if (s.reconstructed) {
             const img = document.createElement('img');
             img.src = `/snapshots/${safeName}.png`;
-            img.alt = `Snapshot for ${s.session}`;
+            img.alt = `Spiral reconstruction for ${s.session}`;
             img.loading = 'lazy';
             thumb.appendChild(img);
           } else {
             const c = document.createElement('canvas');
             c.style.cssText = 'width:100%;height:100%;display:block';
             thumb.appendChild(c);
-            // Draw placeholder lazily once card is visible
-            requestAnimationFrame(() => drawPlaceholder(c, s.session));
+            needsReconstruct.push({ canvas: c, session: s.session });
           }
 
           if (s.recording?.active || false) {
@@ -674,6 +686,13 @@
 
         el.innerHTML = '';
         el.appendChild(grid);
+
+        // Reconstruct missing Spiral thumbnails one at a time — a one-time
+        // cost per session (each gets cached via reconstructSpiral), so
+        // there's no need to race them all in parallel on this load.
+        for (const item of needsReconstruct) {
+          await reconstructSpiral(item.canvas, item.session).catch(() => {});
+        }
       } catch (err) {
         document.getElementById('gallery').innerHTML =
           `<div class="gallery-empty">Could not load recordings: ${escHtml(err.message)}</div>`;
