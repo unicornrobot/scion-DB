@@ -211,6 +211,88 @@ function sessionBaseQuery(bucket, measurement, extra = '') {
   `;
 }
 
+// Fetch one session's series from InfluxDB, downsampled to ~maxPoints points
+// per field. Shared by GET /api/sessions/:name and the gallery export route
+// (server.js /api/gallery/export). Throws with `.status = 404` if the
+// session has no data.
+async function fetchSessionSeries(name, maxPoints, everyOverride) {
+  // Three fast queries to find range + point count without a slow full-scan reduce.
+  function sessionMeta(agg) {
+    return `
+      from(bucket: "${fluxStr(INFLUX_BUCKET)}")
+        |> range(start: ${RANGE_LOOKBACK})
+        |> filter(fn: (r) => r._measurement == "${fluxStr(INFLUX_MEASUREMENT)}"
+                          and r._field == "value"
+                          and r.session == "${fluxStr(name)}")
+        |> group()
+        |> ${agg}()
+    `;
+  }
+  const [firstRows, lastRows, countRows] = await Promise.all([
+    flux(sessionMeta('first')),
+    flux(sessionMeta('last')),
+    flux(sessionMeta('count')),
+  ]);
+
+  if (!firstRows.length) {
+    const err = new Error('session not found or empty');
+    err.status = 404;
+    throw err;
+  }
+  const startMs = new Date(firstRows[0]._time).getTime();
+  const endMs   = new Date(lastRows[0]._time).getTime();
+  const totalPoints = Number(countRows[0]?._value ?? 0);
+  const perField = totalPoints / TRACKED_FIELDS.length;
+
+  let every = everyOverride;
+  if (!every) {
+    if (perField <= maxPoints) {
+      every = null; // No downsampling needed.
+    } else {
+      const rangeMs = Math.max(1, endMs - startMs);
+      const everyMs = Math.max(1, Math.ceil(rangeMs / maxPoints));
+      every = `${everyMs}ms`;
+    }
+  }
+
+  const aggregate = every
+    ? `|> aggregateWindow(every: ${every}, fn: mean, createEmpty: false)`
+    : '';
+
+  const dataQuery = `
+    from(bucket: "${fluxStr(INFLUX_BUCKET)}")
+      |> range(start: time(v: ${startMs * 1_000_000}), stop: time(v: ${(endMs + 1) * 1_000_000}))
+      |> filter(fn: (r) => r._measurement == "${fluxStr(INFLUX_MEASUREMENT)}")
+      |> filter(fn: (r) => r.session == "${fluxStr(name)}")
+      |> filter(fn: (r) => r._field == "value")
+      ${aggregate}
+      |> keep(columns: ["_time", "_value", "field"])
+  `;
+  const rows = await flux(dataQuery);
+
+  const series = Object.fromEntries(TRACKED_FIELDS.map((f) => [f, []]));
+  for (const r of rows) {
+    const f = r.field;
+    if (!series[f]) continue;
+    series[f].push({
+      x: new Date(r._time).getTime(),
+      y: Number(r._value),
+    });
+  }
+  for (const f of TRACKED_FIELDS) {
+    series[f].sort((a, b) => a.x - b.x);
+  }
+
+  return {
+    session: name,
+    startMs,
+    endMs,
+    every: every || null,
+    points: rows.length,
+    series,
+  };
+}
+
 // List recorded sessions — three fast grouped queries instead of one slow reduce.
 app.get('/api/sessions', async (_req, res) => {
   try {
@@ -250,79 +332,100 @@ app.get('/api/sessions/:name', async (req, res) => {
   const name = req.params.name;
   const maxPoints = Math.max(100, Math.min(20000, parseInt(req.query.maxPoints || '2000', 10)));
   try {
-    // Three fast queries to find range + point count without a slow full-scan reduce.
-    function sessionMeta(agg) {
-      return `
-        from(bucket: "${fluxStr(INFLUX_BUCKET)}")
-          |> range(start: ${RANGE_LOOKBACK})
-          |> filter(fn: (r) => r._measurement == "${fluxStr(INFLUX_MEASUREMENT)}"
-                            and r._field == "value"
-                            and r.session == "${fluxStr(name)}")
-          |> group()
-          |> ${agg}()
-      `;
+    res.json(await fetchSessionSeries(name, maxPoints, req.query.every));
+  } catch (err) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+const EXPORT_MAX_POINTS = 3000; // per-field cap for un-snapshotted sessions in a
+                                 // gallery export — between the live gallery's
+                                 // 4000-thumb/6000-lightbox tiers, since one
+                                 // embedded array here has to serve both roles.
+
+// Builds the self-contained "public gallery" HTML: no live server, InfluxDB,
+// WebSocket, or network access required to view it — every session's data is
+// inlined (a cached snapshot PNG as a data URI, or a trimmed series for the
+// page's own SacredSpiralVisualizer.replay() to redraw client-side).
+function buildGalleryExportHtml(sessions) {
+  const template = fs.readFileSync(
+    path.join(__dirname, 'templates', 'gallery-export-template.html'), 'utf8');
+  const spiralSrc = fs.readFileSync(
+    path.join(__dirname, 'public', 'js', 'visualizers', 'sacred-spiral.js'), 'utf8');
+  const dataJson = JSON.stringify({ generatedAt: Date.now(), sessions })
+    .replace(/</g, '\\u003c'); // guard against a plant name/notes containing "</script>"
+
+  // Function-form replacer: a plain string replacement would misinterpret a
+  // literal "$&"/"$'" inside spiralSrc/dataJson as a special replace pattern.
+  return template
+    .replace('/*__SACRED_SPIRAL_JS__*/', () => spiralSrc)
+    .replace('/*__GALLERY_DATA__*/', () => `window.SCION_GALLERY = ${dataJson};`);
+}
+
+// Exports all sessions flagged `public: true` in meta.json into a single
+// downloadable HTML file — see buildGalleryExportHtml() and
+// templates/gallery-export-template.html.
+app.get('/api/gallery/export', async (_req, res) => {
+  try {
+    const meta = readJSON(META_FILE, {});
+    const publicNames = Object.keys(meta).filter((s) => meta[s]?.public === true);
+    if (!publicNames.length) {
+      return res.status(400).json({ error: 'No sessions are marked public yet.' });
     }
+
     const [firstRows, lastRows, countRows] = await Promise.all([
-      flux(sessionMeta('first')),
-      flux(sessionMeta('last')),
-      flux(sessionMeta('count')),
+      flux(sessionBaseQuery(INFLUX_BUCKET, INFLUX_MEASUREMENT, '|> first()')),
+      flux(sessionBaseQuery(INFLUX_BUCKET, INFLUX_MEASUREMENT, '|> last()')),
+      flux(sessionBaseQuery(INFLUX_BUCKET, INFLUX_MEASUREMENT, '|> count()')),
     ]);
+    const startMap = {}, endMap = {}, countMap = {};
+    for (const r of firstRows) if (r.session) startMap[r.session] = new Date(r._time).getTime();
+    for (const r of lastRows)  if (r.session) endMap[r.session]   = new Date(r._time).getTime();
+    for (const r of countRows) if (r.session) countMap[r.session] = Number(r._value);
 
-    if (!firstRows.length) {
-      return res.status(404).json({ error: 'session not found or empty' });
-    }
-    const startMs = new Date(firstRows[0]._time).getTime();
-    const endMs   = new Date(lastRows[0]._time).getTime();
-    const totalPoints = Number(countRows[0]?._value ?? 0);
-    const perField = totalPoints / TRACKED_FIELDS.length;
+    // A public flag with no matching Influx data (session since deleted) is
+    // silently dropped rather than surfaced as an error.
+    const ordered = publicNames
+      .filter((n) => n in startMap)
+      .sort((a, b) => (endMap[b] ?? 0) - (endMap[a] ?? 0));
 
-    let every = req.query.every;
-    if (!every) {
-      if (perField <= maxPoints) {
-        every = null; // No downsampling needed.
-      } else {
-        const rangeMs = Math.max(1, endMs - startMs);
-        const everyMs = Math.max(1, Math.ceil(rangeMs / maxPoints));
-        every = `${everyMs}ms`;
+    const sessions = [];
+    for (const name of ordered) {
+      const m = meta[name] || {};
+      const base = {
+        session: name,
+        startMs: startMap[name],
+        endMs: endMap[name] ?? startMap[name],
+        points: countMap[name] ?? 0,
+        plant: m.plant || null,
+      };
+      const safe = name.replace(/[^a-zA-Z0-9_\-]/g, '_');
+      const snapFile = path.join(SNAP_DIR, `${safe}.png`);
+
+      // Sequential, not parallel — bounds InfluxDB load; this is a rare,
+      // owner-triggered action rather than a hot path.
+      try {
+        if (m.hasSnapshot && fs.existsSync(snapFile)) {
+          const b64 = fs.readFileSync(snapFile).toString('base64');
+          sessions.push({ ...base, thumb: { type: 'png', dataUri: `data:image/png;base64,${b64}` } });
+        } else {
+          const { series } = await fetchSessionSeries(name, EXPORT_MAX_POINTS);
+          sessions.push({ ...base, thumb: { type: 'series', series } });
+        }
+      } catch (err) {
+        console.error(`[gallery-export] skipping "${name}":`, err.message);
       }
     }
 
-    const aggregate = every
-      ? `|> aggregateWindow(every: ${every}, fn: mean, createEmpty: false)`
-      : '';
-
-    const dataQuery = `
-      from(bucket: "${fluxStr(INFLUX_BUCKET)}")
-        |> range(start: time(v: ${startMs * 1_000_000}), stop: time(v: ${(endMs + 1) * 1_000_000}))
-        |> filter(fn: (r) => r._measurement == "${fluxStr(INFLUX_MEASUREMENT)}")
-        |> filter(fn: (r) => r.session == "${fluxStr(name)}")
-        |> filter(fn: (r) => r._field == "value")
-        ${aggregate}
-        |> keep(columns: ["_time", "_value", "field"])
-    `;
-    const rows = await flux(dataQuery);
-
-    const series = Object.fromEntries(TRACKED_FIELDS.map((f) => [f, []]));
-    for (const r of rows) {
-      const f = r.field;
-      if (!series[f]) continue;
-      series[f].push({
-        x: new Date(r._time).getTime(),
-        y: Number(r._value),
-      });
-    }
-    for (const f of TRACKED_FIELDS) {
-      series[f].sort((a, b) => a.x - b.x);
+    if (!sessions.length) {
+      return res.status(400).json({ error: 'No public sessions had usable data.' });
     }
 
-    res.json({
-      session: name,
-      startMs,
-      endMs,
-      every: every || null,
-      points: rows.length,
-      series,
-    });
+    const html = buildGalleryExportHtml(sessions);
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="scion-public-gallery-${stamp}.html"`);
+    res.send(html);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

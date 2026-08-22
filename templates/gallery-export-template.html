@@ -1,0 +1,328 @@
+<!--
+  Server-side template for GET /api/gallery/export (see server.js,
+  buildGalleryExportHtml()). The two placeholder comments below are
+  string-replaced per request — this file itself is never served to a
+  browser directly (it lives outside public/). Opening it as-is is harmless
+  (both placeholders are valid empty JS comments) but shows an empty
+  gallery, since window.SCION_GALLERY is never defined.
+
+  The whole point of the resulting artifact is that it needs NOTHING else
+  once generated: no live server, no InfluxDB, no WebSocket, no network
+  access at all. Every session's image data is either a cached snapshot PNG
+  inlined as a data: URI, or a trimmed series inlined as JSON for this
+  page's own copy of SacredSpiralVisualizer to replay client-side.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Scion · Public Gallery</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  /* Fixed dark palette baked in directly — no theme.js, no localStorage, no
+     light/dark toggle. This file must render identically whether opened via
+     file://, a static host, or an email attachment, and file:// origins
+     have inconsistent localStorage behaviour across browsers. */
+  :root {
+    --bg:         #090d0b;
+    --panel:      #0d1210;
+    --border:     #1e2a22;
+    --border-l:   #2a3d30;
+    --fg:         #d8e6da;
+    --muted:      #6a8872;
+    --plant:      #3a7d44;
+    --plant-l:    #6ab87a;
+    --accent:     #4cc9f0;
+    --mono:       "SF Mono","Fira Code",monospace;
+    --card-glow:  0 2px 18px rgba(0,200,80,.05);
+    --card-hov:   0 4px 28px rgba(0,200,80,.12);
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg); min-height: 100vh;
+    font-family: -apple-system,"Segoe UI",system-ui,sans-serif;
+    padding: 24px clamp(16px, 4vw, 48px) 60px;
+  }
+
+  header { margin-bottom: 24px; }
+  header h1 { font-size: 18px; margin: 0 0 4px; }
+  header .sub { font-size: 12px; color: var(--muted); }
+
+  .gallery-empty {
+    color: var(--muted); font-size: 12px; padding: 32px 0;
+    text-align: center; border: 1px dashed var(--border);
+    border-radius: 10px;
+  }
+
+  /* ── Card grid — copied from dashboard.html's gallery rules ──────────── */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid rgba(58,125,68,.30);
+    border-radius: 10px; overflow: hidden;
+    box-shadow: var(--card-glow);
+    transition: box-shadow .2s, border-color .2s;
+    display: flex; flex-direction: column;
+  }
+  .card:hover { box-shadow: var(--card-hov); border-color: rgba(106,184,122,.45); }
+  .card-thumb {
+    position: relative; aspect-ratio: 16/9; background: #050908;
+    overflow: hidden; flex-shrink: 0; cursor: zoom-in;
+  }
+  .card-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; opacity: .92; }
+  .card-thumb canvas { display: block; width: 100%; height: 100%; }
+  .card-body { padding: 12px 14px; flex: 1; display: flex; flex-direction: column; gap: 6px; }
+  .card-plant-name {
+    font-size: 13px; font-weight: 600; color: var(--plant-l);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .card-plant-row { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); }
+  .card-plant-row em { font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .card-plant-row a { color: var(--accent); text-decoration: none; font-size: 11px; flex-shrink: 0; }
+  .card-plant-row a:hover { text-decoration: underline; }
+  .card-divider { border: none; border-top: 1px solid var(--border); margin: 0; }
+  .card-date { font-size: 11px; color: var(--fg); margin-bottom: 2px; }
+  .card-meta { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+
+  /* ── Fullsize lightbox — copied from dashboard.html ──────────────────── */
+  .lightbox {
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(5,9,7,.92); backdrop-filter: blur(4px);
+    display: none; align-items: center; justify-content: center;
+    flex-direction: column; gap: 14px; padding: 24px;
+  }
+  .lightbox.open { display: flex; }
+  .lightbox-frame {
+    position: relative;
+    max-width: min(1100px, 92vw); max-height: 78vh;
+    border-radius: 12px; overflow: visible;
+    border: 1px solid var(--border-l); box-shadow: 0 8px 60px rgba(0,0,0,.5);
+    background: #0e1014;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .lightbox-frame canvas, .lightbox-frame img { display: block; border-radius: 12px; max-width: 100%; max-height: 78vh; }
+  .lightbox-close {
+    position: absolute; top: -14px; right: -14px; z-index: 1;
+    width: 30px; height: 30px; border-radius: 50%; padding: 0;
+    background: var(--panel); border: 1px solid var(--border-l); color: var(--fg);
+    font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .lightbox-close:hover { border-color: var(--plant); }
+  .lightbox-loading { color: var(--muted); font-size: 12px; padding: 40px 60px; }
+  .lightbox-meta { color: var(--fg); text-align: center; }
+  .lightbox-meta .lb-name { font-size: 15px; font-weight: 600; color: var(--plant-l); }
+  .lightbox-meta .lb-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Public Gallery</h1>
+  <div class="sub" id="genAt"></div>
+</header>
+
+<div id="gallery"><div class="gallery-empty">No public sessions.</div></div>
+
+<div class="lightbox" id="lightbox">
+  <div class="lightbox-frame" id="lightboxFrame">
+    <button type="button" class="lightbox-close" id="lightboxClose" title="Close (Esc)">✕</button>
+    <div class="lightbox-loading" id="lightboxLoading">Rendering…</div>
+  </div>
+  <div class="lightbox-meta" id="lightboxMeta"></div>
+</div>
+
+<script>/*__SACRED_SPIRAL_JS__*/</script>
+<script>/*__GALLERY_DATA__*/</script>
+<script>
+  // Set directly rather than pulling in viz-engine.js (which opens a live
+  // WebSocket in its constructor — never instantiated here, but this
+  // artifact must not even ship code that could attempt it). Matches
+  // replay()'s own hardcoded final-composite background.
+  window.scionCanvasBg = '#0e1014';
+
+  // ── Formatting helpers — ported verbatim from dashboard.html ───────────
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function fmtDate(ms) {
+    if (!ms) return '—';
+    const d = new Date(ms);
+    return d.toLocaleDateString(undefined, { day:'numeric', month:'short', year:'numeric' })
+         + '  ' + d.toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' });
+  }
+
+  function fmtDuration(startMs, endMs) {
+    const sec = Math.round((endMs - startMs) / 1000);
+    if (sec < 60) return `${sec}s`;
+    const m = Math.floor(sec / 60), s = sec % 60;
+    return `${m}m ${s < 10 ? '0' : ''}${s}s`;
+  }
+
+  function fmtPoints(n) {
+    if (!n) return '—';
+    return n >= 1000 ? (n / 1000).toFixed(1) + 'k pts' : n + ' pts';
+  }
+
+  function drawNoData(canvas) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.offsetWidth || 240, h = canvas.offsetHeight || 135;
+    canvas.width  = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    const cx = canvas.getContext('2d');
+    cx.scale(dpr, dpr);
+    cx.fillStyle = '#0e1014';
+    cx.fillRect(0, 0, w, h);
+    cx.fillStyle = 'rgba(216,230,218,0.35)';
+    cx.font = '11px -apple-system,"Segoe UI",system-ui,sans-serif';
+    cx.textAlign = 'center';
+    cx.textBaseline = 'middle';
+    cx.fillText('no data', w / 2, h / 2);
+  }
+
+  // ── Lightbox — adapted from dashboard.html's openLightbox(): no fetch,
+  // reads the session that's already in memory. A PNG-backed session shows
+  // the same image upscaled (there's no higher-res data to replay); a
+  // series-backed session gets a fresh, higher-resolution replay() from the
+  // already-embedded series array. ──────────────────────────────────────
+  const lightbox       = document.getElementById('lightbox');
+  const lightboxFrame   = document.getElementById('lightboxFrame');
+  const lightboxClose   = document.getElementById('lightboxClose');
+  const lightboxLoading = document.getElementById('lightboxLoading');
+  const lightboxMeta    = document.getElementById('lightboxMeta');
+
+  function closeLightbox() {
+    lightbox.classList.remove('open');
+    lightboxFrame.querySelector('canvas, img.lb-img')?.remove();
+  }
+  lightboxClose.addEventListener('click', closeLightbox);
+  lightbox.addEventListener('click', (e) => { if (e.target === lightbox) closeLightbox(); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && lightbox.classList.contains('open')) closeLightbox();
+  });
+
+  function openLightbox(s) {
+    lightbox.classList.add('open');
+    lightboxFrame.querySelector('canvas, img.lb-img')?.remove();
+    lightboxLoading.style.display = '';
+    lightboxLoading.textContent = 'Rendering…';
+
+    const plant = s.plant || {};
+    lightboxMeta.innerHTML = `
+      <div class="lb-name">${escHtml(plant.name || s.session)}</div>
+      <div class="lb-sub">${plant.species ? escHtml(plant.species) + ' · ' : ''}${fmtDate(s.startMs)} · ${fmtDuration(s.startMs, s.endMs)} · ${fmtPoints(s.points)}</div>`;
+
+    if (s.thumb.type === 'png') {
+      const img = document.createElement('img');
+      img.className = 'lb-img';
+      img.src = s.thumb.dataUri;
+      lightboxLoading.style.display = 'none';
+      lightboxFrame.appendChild(img);
+      return;
+    }
+
+    const series = s.thumb.series || {};
+    const hasData = Object.values(series).some(arr => arr && arr.length);
+    if (!hasData) { lightboxLoading.textContent = 'No data recorded for this session.'; return; }
+
+    const maxW = Math.min(window.innerWidth * 0.9, 1100);
+    const maxH = window.innerHeight * 0.78;
+    let w = maxW, h = w * 9 / 16;
+    if (h > maxH) { h = maxH; w = h * 16 / 9; }
+    const dpr = window.devicePixelRatio || 1;
+    const pxW = Math.round(w * dpr), pxH = Math.round(h * dpr);
+
+    const out = new SacredSpiralVisualizer().replay(pxW, pxH, series);
+    out.style.cssText = `width:${Math.round(w)}px;height:${Math.round(h)}px`;
+    lightboxLoading.style.display = 'none';
+    lightboxFrame.appendChild(out);
+  }
+
+  // ── Gallery grid — adapted from dashboard.html's loadGallery(): reads
+  // window.SCION_GALLERY instead of fetching /api/sessions, and drops
+  // everything that assumes a live server (no delete button, no "open in
+  // chart" link, no snapshot upload-back — this artifact is read-only). ──
+  function renderGallery() {
+    const data = window.SCION_GALLERY || { generatedAt: Date.now(), sessions: [] };
+    document.getElementById('genAt').textContent =
+      `Generated ${fmtDate(data.generatedAt)} · ${data.sessions.length} recording${data.sessions.length === 1 ? '' : 's'}`;
+
+    const el = document.getElementById('gallery');
+    if (!data.sessions.length) return; // default "No public sessions." stays in place
+
+    const grid = document.createElement('div');
+    grid.className = 'card-grid';
+
+    for (const s of data.sessions) {
+      const plant = s.plant || {};
+
+      const card = document.createElement('div');
+      card.className = 'card';
+
+      const thumb = document.createElement('div');
+      thumb.className = 'card-thumb';
+
+      if (s.thumb.type === 'png') {
+        const img = document.createElement('img');
+        img.src = s.thumb.dataUri;
+        img.alt = `Spiral reconstruction for ${s.session}`;
+        thumb.appendChild(img);
+      } else {
+        const c = document.createElement('canvas');
+        c.style.cssText = 'width:100%;height:100%;display:block';
+        thumb.appendChild(c);
+        const series = s.thumb.series || {};
+        const hasData = Object.values(series).some(arr => arr && arr.length);
+        if (hasData) {
+          const dpr = window.devicePixelRatio || 1;
+          const w = Math.round(240 * dpr), h = Math.round(135 * dpr);
+          const out = new SacredSpiralVisualizer().replay(w, h, series);
+          c.width = w; c.height = h;
+          c.getContext('2d').drawImage(out, 0, 0);
+        } else {
+          drawNoData(c);
+        }
+      }
+
+      thumb.addEventListener('click', () => openLightbox(s));
+
+      const body = document.createElement('div');
+      body.className = 'card-body';
+
+      const nameHtml = plant.name
+        ? `<div class="card-plant-name">${escHtml(plant.name)}</div>`
+        : `<div class="card-plant-name" style="color:var(--muted);font-weight:400">${escHtml(s.session)}</div>`;
+
+      const speciesHtml = plant.species
+        ? `<div class="card-plant-row"><em>${escHtml(plant.species)}</em>${
+            plant.url ? `<a href="${escHtml(plant.url)}" target="_blank" rel="noopener" title="Plant info">↗</a>` : ''
+          }</div>`
+        : '';
+
+      body.innerHTML = `
+        ${nameHtml}
+        ${speciesHtml}
+        <hr class="card-divider">
+        <div class="card-date">${fmtDate(s.startMs)}</div>
+        <div class="card-meta">${fmtDuration(s.startMs, s.endMs)} · ${fmtPoints(s.points)}</div>`;
+
+      card.appendChild(thumb);
+      card.appendChild(body);
+      grid.appendChild(card);
+    }
+
+    el.innerHTML = '';
+    el.appendChild(grid);
+  }
+
+  renderGallery();
+</script>
+</body>
+</html>

@@ -163,6 +163,14 @@
       display: flex; align-items: baseline; justify-content: space-between;
       margin-bottom: 16px;
     }
+    .gallery-export-btn {
+      padding: 7px 14px; border-radius: 7px; border: 1px solid var(--plant);
+      background: transparent; color: var(--plant-l);
+      font-size: 11px; font-weight: 600; cursor: pointer;
+      transition: background .15s;
+    }
+    .gallery-export-btn:hover { background: rgba(58,125,68,.15); }
+    .gallery-export-btn:disabled { opacity: .5; cursor: default; }
     .gallery-empty {
       color: var(--muted); font-size: 12px; padding: 32px 0;
       text-align: center; border: 1px dashed var(--border);
@@ -221,7 +229,12 @@
       font-size: 11px; color: var(--muted); font-family: var(--mono);
     }
     .card-date { font-size: 11px; color: var(--fg); margin-bottom: 2px; }
-    .card-footer { margin-top: auto; padding-top: 8px; display: flex; gap: 6px; }
+    .card-footer { margin-top: auto; padding-top: 8px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .card-public-toggle {
+      display: flex; align-items: center; gap: 4px;
+      font-size: 11px; color: var(--muted); cursor: pointer; flex-shrink: 0;
+    }
+    .card-public-toggle input { accent-color: var(--plant); cursor: pointer; }
     .card-link {
       flex: 1; display: block; text-align: center;
       padding: 6px 10px; border-radius: 6px;
@@ -327,6 +340,7 @@
     <!-- Gallery -->
     <div class="gallery-header">
       <div class="section-label" style="margin-bottom:0">Recordings</div>
+      <button type="button" class="gallery-export-btn" id="exportGalleryBtn" title="Bundle every session marked Public into one self-contained HTML file you can share anywhere">Export public gallery</button>
     </div>
     <div id="gallery"><div class="gallery-empty">No recordings found.</div></div>
 
@@ -505,8 +519,12 @@
             }
             if (msg.isRelay) {
               isRelay = true;
-              // Hides any delete buttons rendered before hello arrived.
-              document.querySelectorAll('.card-del').forEach(b => b.style.display = 'none');
+              // Hides any owner-only controls rendered before hello arrived —
+              // a relay viewer shouldn't delete, curate, or export someone
+              // else's recordings.
+              document.querySelectorAll('.card-del, .card-public-toggle').forEach(b => b.style.display = 'none');
+              const exportBtn = document.getElementById('exportGalleryBtn');
+              if (exportBtn) exportBtn.style.display = 'none';
             }
           }
         } catch (_) {}
@@ -753,8 +771,24 @@
             <div class="card-meta">${fmtDuration(s.startMs, s.endMs)} · ${fmtPoints(s.points)}</div>
             <div class="card-footer">
               <a class="card-link" href="/?session=${encodeURIComponent(s.session)}">Open in chart</a>
+              ${isRelay ? '' : `<label class="card-public-toggle" title="Include in public gallery export">
+                <input type="checkbox" ${s.public ? 'checked' : ''}> Public</label>`}
               ${isRelay ? '' : '<button class="card-del" title="Delete recording">✕</button>'}
             </div>`;
+
+          if (!isRelay) body.querySelector('.card-public-toggle input').addEventListener('change', async (e) => {
+            const checked = e.target.checked;
+            try {
+              await fetch(`/api/sessions/${encodeURIComponent(s.session)}/meta`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ public: checked }),
+              });
+            } catch (err) {
+              e.target.checked = !checked;
+              alert(`Could not update: ${err.message}`);
+            }
+          });
 
           if (!isRelay) body.querySelector('.card-del').addEventListener('click', async () => {
             if (!confirm(`Delete recording "${s.session}"?\n\nThis removes all data from InfluxDB and cannot be undone.`)) return;
@@ -794,6 +828,39 @@
     }
 
     loadGallery();
+
+    // ── Public gallery export ────────────────────────────────────────────
+    // Fetch + blob + a synthesized <a download> click, rather than a plain
+    // navigation — the export can take a few seconds of InfluxDB round-trips
+    // for any public session without a cached snapshot, and a raw link would
+    // give no loading state and could silently "download" a JSON error body.
+    document.getElementById('exportGalleryBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('exportGalleryBtn');
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Generating…';
+      try {
+        const res = await fetch('/api/gallery/export');
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || `HTTP ${res.status}`);
+        }
+        const blob = await res.blob();
+        const match = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '');
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = match ? match[1] : 'scion-public-gallery.html';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(a.href);
+      } catch (err) {
+        alert(`Export failed: ${err.message}`);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+      }
+    });
   </script>
 </body>
 </html>
