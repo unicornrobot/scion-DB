@@ -32,13 +32,13 @@ const SACRED_PALETTES = {
 // streak resets to 0 the instant the signal flips state (see _updateMood),
 // so these describe *continuous* quiet/busy time, not a running total.
 const MOOD_IDLE_STAGES = [
-  { t: 30, palette: 'ocean' },
-  { t: 90, palette: 'void'  },
+  { t: 5, palette: 'ocean' },
+  { t: 10, palette: 'void'  },
 ];
 const MOOD_ACTIVE_STAGES = [
-  { t: 30,  palette: 'solar' },
-  { t: 60,  palette: 'fire'  },
-  { t: 120, palette: 'prism' },
+  { t: 10,  palette: 'solar' },
+  { t: 15,  palette: 'fire'  },
+  { t: 20, palette: 'prism' },
 ];
 class SacredSpiralVisualizer {
   constructor() {
