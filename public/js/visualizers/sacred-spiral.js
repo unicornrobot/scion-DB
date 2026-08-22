@@ -7,6 +7,12 @@
  *   sparkField   — field driving radial spark length            (default: 'deviation')
  *   sparkScale   — exaggeration multiplier for spark length     (default: 1.0)
  *   palette      — colour palette name                          (default: 'aurora')
+ *
+ * Palette also drifts on its own, driven by how long the signal has been
+ * quiet or busy — see MOOD_IDLE_STAGES / MOOD_ACTIVE_STAGES below. Whenever
+ * neither streak is long enough to count as a "mood", palette selection
+ * falls back to the original behaviour: a random pick each time the spiral
+ * completes a revolution.
  */
 
 // Harmonic colour palettes — each maps normalised intensity (0→1) to a hue
@@ -19,6 +25,21 @@ const SACRED_PALETTES = {
   void:     { h0: 255, h1: 330, s: 65, l0: 26, l1: 78 },  // indigo → rose
   prism:    { h0:   0, h1: 330, s: 82, l0: 46, l1: 88 },  // full spectrum
 };
+
+// Mood drift stages: each list is walked deepest-first, so the palette
+// reflects the longest threshold currently satisfied. Idle drifts toward
+// cool/muted tones; sustained activity drifts toward hot/vivid ones. Either
+// streak resets to 0 the instant the signal flips state (see _updateMood),
+// so these describe *continuous* quiet/busy time, not a running total.
+const MOOD_IDLE_STAGES = [
+  { t: 30, palette: 'ocean' },
+  { t: 90, palette: 'void'  },
+];
+const MOOD_ACTIVE_STAGES = [
+  { t: 30,  palette: 'solar' },
+  { t: 60,  palette: 'fire'  },
+  { t: 120, palette: 'prism' },
+];
 class SacredSpiralVisualizer {
   constructor() {
     this.watchField  = 'variance';
@@ -42,6 +63,9 @@ class SacredSpiralVisualizer {
     this._changePeak = 0.0001; // running max of _changeEma — adapts to session scale
     this._sparkPeak  = 0.001; // running max of spark field — auto-calibrates spark scale
     this._sparkTip   = null;  // last computed spark tip position
+    this._idleTime   = 0;     // seconds of continuous inactivity
+    this._activeTime = 0;     // seconds of continuous activity
+    this._mood       = 'neutral'; // 'neutral' | 'idle' | 'active' — exposed for panel/debugging
     this._w = 0;
     this._h = 0;
   }
@@ -67,6 +91,9 @@ class SacredSpiralVisualizer {
     this._changePeak = 0.0001;
     this._sparkPeak  = 0.001;
     this._prevSmooth = {};
+    this._idleTime   = 0;
+    this._activeTime = 0;
+    this._mood       = 'neutral';
   }
 
   onResize(w, h) {
@@ -81,6 +108,9 @@ class SacredSpiralVisualizer {
     this._sparkPeak  = 0.001;
     this._changePeak = 0.0001;
     this._changeEma  = 0;
+    this._idleTime   = 0;
+    this._activeTime = 0;
+    this._mood       = 'neutral';
     this._initTrail(this._w, this._h);
   }
 
@@ -133,6 +163,7 @@ class SacredSpiralVisualizer {
 
     const cx = w * 0.5, cy = h * 0.5;
     const moving = this._detectMovement(state.smooth);
+    this._updateMood(dt, moving);
 
     if (moving) {
       this._advanceAndDraw(cx, cy, dt, state);
@@ -178,6 +209,38 @@ class SacredSpiralVisualizer {
     return moving;
   }
 
+  // ── Palette mood drift ───────────────────────────────────────────────────
+  // Shared by render() and replay(): tracks how long the signal has been
+  // continuously quiet or continuously moving, and — once either streak
+  // clears its first stage threshold — overrides the palette directly
+  // (MOOD_IDLE_STAGES / MOOD_ACTIVE_STAGES), deepest stage cleared wins.
+  // Either streak resets the instant `moving` flips, so a burst that's too
+  // short to clear a stage just leaves the palette wherever it was — no
+  // flicker. While neither streak is deep enough ('neutral'), palette
+  // selection is left to the random-on-wrap logic in _advanceAndDraw().
+  _updateMood(dt, moving) {
+    if (moving) {
+      this._idleTime   = 0;
+      this._activeTime += dt;
+    } else {
+      this._activeTime = 0;
+      this._idleTime   += dt;
+    }
+
+    const idleStage   = MOOD_IDLE_STAGES.filter(s => this._idleTime   >= s.t).pop();
+    const activeStage = MOOD_ACTIVE_STAGES.filter(s => this._activeTime >= s.t).pop();
+
+    if (idleStage) {
+      this._mood   = 'idle';
+      this.palette = idleStage.palette;
+    } else if (activeStage) {
+      this._mood   = 'active';
+      this.palette = activeStage.palette;
+    } else {
+      this._mood = 'neutral';
+    }
+  }
+
   // ── Spiral advance ───────────────────────────────────────────────────────
   // Shared by render() and replay(): advances the angle by a fixed arc
   // length (scaled by _sizeScale() so the spiral's overall extent — not just
@@ -192,9 +255,14 @@ class SacredSpiralVisualizer {
     if (r > this._maxR()) {
       this._angle  = 0;
       this._lastPt = null;    // break the line — don't draw edge-to-centre
-      // Pick a new random palette each time the spiral wraps
-      const keys = Object.keys(SACRED_PALETTES);
-      this.palette = keys[Math.floor(Math.random() * keys.length)];
+      // Pick a new random palette each time the spiral wraps — but only
+      // while mood drift isn't already dictating the palette (see
+      // _updateMood); otherwise a wrap mid-idle/active streak would stomp
+      // on the deliberate cool/hot drift with a random pick.
+      if (this._mood === 'neutral') {
+        const keys = Object.keys(SACRED_PALETTES);
+        this.palette = keys[Math.floor(Math.random() * keys.length)];
+      }
     }
 
     this._appendPt(cx, cy, state);
@@ -324,6 +392,8 @@ class SacredSpiralVisualizer {
     const state = { smooth: {} };
     for (const f of FIELDS) state[f] = null;
     let lastT = events[0].t;
+    this._idleTime = this._activeTime = 0;
+    this._mood = 'neutral';
 
     for (const ev of events) {
       const dt = Math.min((ev.t - lastT) / 1000, 0.1);
@@ -334,6 +404,7 @@ class SacredSpiralVisualizer {
       else state.smooth[ev.field] += 0.12 * (ev.value - state.smooth[ev.field]);
 
       const moving = this._detectMovement(state.smooth);
+      this._updateMood(dt, moving);
       if (moving) this._advanceAndDraw(cx, cy, dt, state);
     }
 

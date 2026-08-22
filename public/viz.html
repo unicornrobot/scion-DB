@@ -135,6 +135,8 @@
       transition: color .3s;
     }
     .ap-current.over { color: var(--ok); }
+    .ap-current.mood-idle   { color: #5aa9e6; }  /* cooling toward ocean/void */
+    .ap-current.mood-active { color: #ff8a5c; }  /* heating toward solar/fire/prism */
     .ap-divider {
       border: none; border-top: 1px solid var(--border);
       margin: 12px 0;
@@ -288,6 +290,12 @@
 
       <div class="sb-section">
         <div class="sb-label">Appearance</div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Mood</span>
+            <span class="ap-current" id="apMood" title="Palette drifts cool after sustained quiet, hot after sustained activity — see comments in sacred-spiral.js">neutral</span>
+          </div>
+        </div>
         <div class="ap-row">
           <div class="ap-label"><span>Palette</span></div>
           <select class="ap-select" id="apPalette">
@@ -690,6 +698,7 @@
     const apCurrent           = document.getElementById('apCurrent');
     const apBarFill           = document.getElementById('apBarFill');
     const apBarThresh         = document.getElementById('apBarThresh');
+    const apMood              = document.getElementById('apMood');
     const apPalette           = document.getElementById('apPalette');
     const apSparkStyle        = document.getElementById('apSparkStyle');
     const apPointStyle        = document.getElementById('apPointStyle');
@@ -808,6 +817,9 @@
       const over = norm > sens;
 
       if (apPalette.value !== sacredViz.palette) apPalette.value = sacredViz.palette;
+      apMood.textContent = sacredViz._mood;
+      apMood.classList.toggle('mood-idle',   sacredViz._mood === 'idle');
+      apMood.classList.toggle('mood-active', sacredViz._mood === 'active');
       apCurrent.textContent = norm.toFixed(2);
       apCurrent.classList.toggle('over', over);
       apBarFill.style.width  = Math.min(norm * 100, 100) + '%';
