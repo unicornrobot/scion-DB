@@ -124,7 +124,14 @@ git restore .            # discard changes to tracked files
 git clean -fd            # remove untracked files — respects .gitignore, so .env/data/ are safe
 ```
 
-The server runs as a plain `node` process rather than a service, so picking up the update means stopping the old process and starting a new one:
+**If you're running the `scion` systemd service** (see [Running as a service on Linux](#running-as-a-service-on-linux)):
+
+```bash
+sudo systemctl restart scion
+sudo systemctl status scion    # confirm it came back up
+```
+
+**If you're running it as a plain `node` process** (no service set up), picking up the update means stopping the old process and starting a new one:
 
 ```bash
 # Find the running process
@@ -139,8 +146,6 @@ npm start
 # ...or, to keep it running after you close the terminal/SSH session:
 nohup npm start > scion.log 2>&1 &
 ```
-
-Having to find and kill a PID every time gets old fast — see [Running as a service on Linux](#running-as-a-service-on-linux) below if you'd rather just run `sudo systemctl restart scion` after each pull.
 
 ---
 
@@ -416,6 +421,16 @@ WantedBy=multi-user.target
 sudo systemctl daemon-reload
 sudo systemctl enable --now scion
 sudo systemctl status scion
+```
+
+**Day-to-day control**, once the service is set up:
+
+```bash
+sudo systemctl restart scion   # stop + start in one step — use this after a `git pull`
+sudo systemctl stop scion
+sudo systemctl start scion
+sudo systemctl status scion    # confirm it's active/running
+journalctl -u scion -f         # tail its logs
 ```
 
 ---

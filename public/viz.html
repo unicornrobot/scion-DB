@@ -251,6 +251,7 @@
         <option value="organic">Mycelium</option>
         <option value="sacred" selected>Spiral</option>
         <option value="tapestry">Tapestry</option>
+        <option value="coresample">Core Sample</option>
       </select>
     </div>
 
@@ -568,6 +569,105 @@
       </div>
     </div>
 
+    <!-- Core Sample settings — shown only when that viz is active -->
+    <div id="coreSampleSettings" style="display:none">
+      <div class="sb-section">
+        <div class="sb-label">Signal</div>
+        <div class="ap-row">
+          <div class="ap-label"><span>Watch field</span></div>
+          <select class="ap-select" id="csField">
+            <option value="mean">mean</option>
+            <option value="min">min</option>
+            <option value="max">max</option>
+            <option value="delta">delta</option>
+            <option value="variance">variance</option>
+            <option value="deviation" selected>deviation</option>
+          </select>
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Sensitivity</span>
+            <code id="csSensDisplay">0.30</code>
+          </div>
+          <input type="range" class="ap-range" id="csSens" min="0" max="1" step="0.01" value="0.3">
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Activity</span>
+            <span class="ap-current" id="csCurrent">—</span>
+          </div>
+          <div class="ap-bar-wrap">
+            <div class="ap-bar-fill" id="csBarFill"></div>
+            <div class="ap-bar-thresh" id="csBarThresh"></div>
+          </div>
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Deposition speed</span>
+            <code id="csSpeedDisplay">1.0</code>
+          </div>
+          <input type="range" class="ap-range" id="csSpeed" min="0.25" max="4.0" step="0.05" value="1.0">
+        </div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-label">Layers</div>
+        <div class="ap-row">
+          <div class="ap-label"><span>Orientation</span></div>
+          <select class="ap-select" id="csOrientation">
+            <option value="vertical" selected>Vertical — time flows down</option>
+            <option value="horizontal">Horizontal — time flows right</option>
+          </select>
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Thickness scale</span>
+            <code id="csThicknessDisplay">1.0</code>
+          </div>
+          <input type="range" class="ap-range" id="csThickness" min="0.25" max="3.0" step="0.05" value="1.0">
+        </div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-label">Texture</div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Grain density</span>
+            <code id="csGrainDisplay">1.0</code>
+          </div>
+          <input type="range" class="ap-range" id="csGrain" min="0.1" max="4.0" step="0.1" value="1.0">
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Grain opacity</span>
+            <code id="csGrainOpacityDisplay">0.60</code>
+          </div>
+          <input type="range" class="ap-range" id="csGrainOpacity" min="0.05" max="1" step="0.01" value="0.6">
+        </div>
+        <div class="ap-row" style="display:flex;align-items:center;gap:8px">
+          <input type="checkbox" id="csShowBoundary" checked style="accent-color:var(--accent);width:14px;height:14px;cursor:pointer;flex-shrink:0">
+          <label for="csShowBoundary" style="font-size:11px;color:var(--muted);cursor:pointer">Show boundary lines</label>
+        </div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-label">Appearance</div>
+        <div class="ap-row">
+          <div class="ap-label"><span>Palette</span></div>
+          <select class="ap-select" id="csPalette">
+            <option value="sediment" selected>Sediment — sand › rust</option>
+            <option value="basalt"          >Basalt   — grey › indigo</option>
+            <option value="coral"           >Coral    — pink › crimson</option>
+            <option value="amber"           >Amber    — gold › burnt orange</option>
+            <option value="slate"           >Slate    — pale › deep blue-grey</option>
+          </select>
+        </div>
+        <div class="ap-row">
+          <button class="ap-btn" id="csReset">Clear core & reset</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Audio stream -->
     <div class="sb-section" id="audioSection">
       <div class="sb-label">Audio stream</div>
@@ -634,6 +734,7 @@
   <script src="/js/visualizers/plant-signal.js"></script>
   <script src="/js/visualizers/sacred-spiral.js"></script>
   <script src="/js/visualizers/tapestry.js"></script>
+  <script src="/js/visualizers/core-sample.js"></script>
   <script>
     // ── Boot ──────────────────────────────────────────────────────────────
     const canvas      = document.getElementById('viz');
@@ -641,19 +742,22 @@
     const sacredViz   = new SacredSpiralVisualizer();
     const physarumViz = new PhysarumVisualizer();
     const plantViz    = new PlantSignalVisualizer();
-    const tapestryViz = new TapestryVisualizer();
+    const tapestryViz   = new TapestryVisualizer();
+    const coreSampleViz = new CoreSampleVisualizer();
 
-    engine.register('plant',    plantViz);
-    engine.register('organic',  physarumViz);
-    engine.register('sacred',   sacredViz);
-    engine.register('tapestry', tapestryViz);
+    engine.register('plant',      plantViz);
+    engine.register('organic',    physarumViz);
+    engine.register('sacred',     sacredViz);
+    engine.register('tapestry',   tapestryViz);
+    engine.register('coresample', coreSampleViz);
     engine.activate('sacred');
 
-    const sidebar          = document.getElementById('sidebar');
-    const sacredSettings   = document.getElementById('sacredSettings');
-    const organicSettings  = document.getElementById('organicSettings');
-    const plantSettings    = document.getElementById('plantSettings');
-    const tapestrySettings = document.getElementById('tapestrySettings');
+    const sidebar            = document.getElementById('sidebar');
+    const sacredSettings     = document.getElementById('sacredSettings');
+    const organicSettings    = document.getElementById('organicSettings');
+    const plantSettings      = document.getElementById('plantSettings');
+    const tapestrySettings   = document.getElementById('tapestrySettings');
+    const coreSampleSettings = document.getElementById('coreSampleSettings');
 
     document.getElementById('sidebarToggle').addEventListener('click', () => {
       sidebar.classList.toggle('open');
@@ -669,10 +773,11 @@
 
     function setViz(name) {
       engine.activate(name);
-      sacredSettings.style.display   = name === 'sacred'   ? '' : 'none';
-      organicSettings.style.display  = name === 'organic'  ? '' : 'none';
-      plantSettings.style.display    = name === 'plant'    ? '' : 'none';
-      tapestrySettings.style.display = name === 'tapestry' ? '' : 'none';
+      sacredSettings.style.display     = name === 'sacred'     ? '' : 'none';
+      organicSettings.style.display    = name === 'organic'    ? '' : 'none';
+      plantSettings.style.display      = name === 'plant'      ? '' : 'none';
+      tapestrySettings.style.display   = name === 'tapestry'   ? '' : 'none';
+      coreSampleSettings.style.display = name === 'coresample' ? '' : 'none';
       localStorage.setItem('scion-active-viz', name);
     }
 
@@ -1138,6 +1243,136 @@
       twBarFill.style.width  = Math.min(norm * 100, 100) + '%';
       twBarFill.classList.toggle('over', over);
       twBarThresh.style.left = Math.min(sens * 100, 100) + '%';
+    }, 100);
+
+    // ── Core Sample panel wiring ──────────────────────────────────────────
+    const csField             = document.getElementById('csField');
+    const csSens              = document.getElementById('csSens');
+    const csSensDisplay       = document.getElementById('csSensDisplay');
+    const csCurrent           = document.getElementById('csCurrent');
+    const csBarFill           = document.getElementById('csBarFill');
+    const csBarThresh         = document.getElementById('csBarThresh');
+    const csSpeed             = document.getElementById('csSpeed');
+    const csSpeedDisplay      = document.getElementById('csSpeedDisplay');
+    const csOrientation       = document.getElementById('csOrientation');
+    const csThickness         = document.getElementById('csThickness');
+    const csThicknessDisplay  = document.getElementById('csThicknessDisplay');
+    const csGrain             = document.getElementById('csGrain');
+    const csGrainDisplay      = document.getElementById('csGrainDisplay');
+    const csGrainOpacity      = document.getElementById('csGrainOpacity');
+    const csGrainOpacityDisplay = document.getElementById('csGrainOpacityDisplay');
+    const csShowBoundary      = document.getElementById('csShowBoundary');
+    const csPalette           = document.getElementById('csPalette');
+    const csReset             = document.getElementById('csReset');
+
+    const CORE_LS_KEY = 'scion-coresample-settings-v1';
+
+    function saveCoreSampleSettings() {
+      try {
+        localStorage.setItem(CORE_LS_KEY, JSON.stringify({
+          watchField:     coreSampleViz.watchField,
+          sensitivity:    coreSampleViz.sensitivity,
+          depositionRate: coreSampleViz.depositionRate,
+          orientation:    coreSampleViz.orientation,
+          thicknessScale: coreSampleViz.thicknessScale,
+          grainDensity:   coreSampleViz.grainDensity,
+          grainOpacity:   coreSampleViz.grainOpacity,
+          showBoundary:   coreSampleViz.showBoundary,
+          palette:        coreSampleViz.palette,
+        }));
+      } catch (_) {}
+    }
+
+    function loadCoreSampleSettings() {
+      let saved = {};
+      try { saved = JSON.parse(localStorage.getItem(CORE_LS_KEY)) || {}; } catch (_) {}
+      if (saved.watchField     != null) { csField.value       = saved.watchField;     coreSampleViz.watchField     = saved.watchField;     }
+      if (saved.sensitivity    != null) { csSens.value        = saved.sensitivity;    coreSampleViz.sensitivity    = saved.sensitivity;    }
+      if (saved.depositionRate != null) { csSpeed.value       = saved.depositionRate; coreSampleViz.depositionRate = saved.depositionRate; }
+      if (saved.orientation    != null) { csOrientation.value = saved.orientation;    coreSampleViz.orientation    = saved.orientation;    }
+      if (saved.thicknessScale != null) { csThickness.value   = saved.thicknessScale; coreSampleViz.thicknessScale = saved.thicknessScale; }
+      if (saved.grainDensity   != null) { csGrain.value       = saved.grainDensity;   coreSampleViz.grainDensity   = saved.grainDensity;   }
+      if (saved.grainOpacity   != null) { csGrainOpacity.value = saved.grainOpacity;  coreSampleViz.grainOpacity   = saved.grainOpacity;   }
+      if (saved.showBoundary   != null) { csShowBoundary.checked = saved.showBoundary; coreSampleViz.showBoundary  = saved.showBoundary;   }
+      if (saved.palette        != null) { csPalette.value     = saved.palette;        coreSampleViz.palette        = saved.palette;        }
+      csSensDisplay.textContent       = coreSampleViz.sensitivity.toFixed(2);
+      csSpeedDisplay.textContent      = coreSampleViz.depositionRate.toFixed(2);
+      csThicknessDisplay.textContent  = coreSampleViz.thicknessScale.toFixed(2);
+      csGrainDisplay.textContent      = coreSampleViz.grainDensity.toFixed(1);
+      csGrainOpacityDisplay.textContent = coreSampleViz.grainOpacity.toFixed(2);
+    }
+
+    loadCoreSampleSettings();
+
+    csField.addEventListener('change', () => {
+      coreSampleViz.watchField = csField.value;
+      saveCoreSampleSettings();
+    });
+
+    csSens.addEventListener('input', () => {
+      const v = parseFloat(csSens.value);
+      csSensDisplay.textContent = v.toFixed(2);
+      coreSampleViz.sensitivity = v;
+      saveCoreSampleSettings();
+    });
+
+    csSpeed.addEventListener('input', () => {
+      const v = parseFloat(csSpeed.value);
+      csSpeedDisplay.textContent = v.toFixed(2);
+      coreSampleViz.depositionRate = v;
+      saveCoreSampleSettings();
+    });
+
+    csOrientation.addEventListener('change', () => {
+      coreSampleViz.orientation = csOrientation.value;
+      coreSampleViz.clearTrail();   // mixing axes mid-trail would garble the image
+      saveCoreSampleSettings();
+    });
+
+    csThickness.addEventListener('input', () => {
+      const v = parseFloat(csThickness.value);
+      csThicknessDisplay.textContent = v.toFixed(2);
+      coreSampleViz.thicknessScale = v;
+      saveCoreSampleSettings();
+    });
+
+    csGrain.addEventListener('input', () => {
+      const v = parseFloat(csGrain.value);
+      csGrainDisplay.textContent = v.toFixed(1);
+      coreSampleViz.grainDensity = v;
+      saveCoreSampleSettings();
+    });
+
+    csGrainOpacity.addEventListener('input', () => {
+      const v = parseFloat(csGrainOpacity.value);
+      csGrainOpacityDisplay.textContent = v.toFixed(2);
+      coreSampleViz.grainOpacity = v;
+      saveCoreSampleSettings();
+    });
+
+    csShowBoundary.addEventListener('change', () => {
+      coreSampleViz.showBoundary = csShowBoundary.checked;
+      saveCoreSampleSettings();
+    });
+
+    csPalette.addEventListener('change', () => {
+      coreSampleViz.palette = csPalette.value;
+      saveCoreSampleSettings();
+    });
+
+    csReset.addEventListener('click', () => coreSampleViz.clearTrail());
+
+    // Live activity bar for Core Sample
+    setInterval(() => {
+      if (coreSampleSettings.style.display === 'none') return;
+      const norm = coreSampleViz._normChange || 0;
+      const sens = coreSampleViz.sensitivity;
+      const over = norm > sens;
+      csCurrent.textContent = norm.toFixed(2);
+      csCurrent.classList.toggle('over', over);
+      csBarFill.style.width  = Math.min(norm * 100, 100) + '%';
+      csBarFill.classList.toggle('over', over);
+      csBarThresh.style.left = Math.min(sens * 100, 100) + '%';
     }, 100);
 
     engine.onConnectionChange = (live) => {
