@@ -1,12 +1,22 @@
 /**
  * Spiral Visualizer
  *
- * Public config (read/written by the admin panel):
- *   watchField   — which smoothed field to monitor for change  (default: 'mean')
- *   sensitivity  — minimum per-frame Δ to count as "changing"  (default: 0.001)
+ * Public config (read/written by the admin panel; see constructor for the
+ * canonical defaults — kept here only as a quick reference):
+ *   watchField   — which smoothed field to monitor for change  (default: 'variance')
+ *   sensitivity  — minimum per-frame Δ to count as "changing"  (default: 0.3)
  *   sparkField   — field driving radial spark length            (default: 'deviation')
  *   sparkScale   — exaggeration multiplier for spark length     (default: 1.0)
- *   palette      — colour palette name                          (default: 'aurora')
+ *   sparkOpacity — max alpha (0–1) for sparks and rings          (default: 0.8)
+ *   palette      — colour palette name                          (default: 'prism')
+ *   sparkStyle   — 'points' | 'lines'                            (default: 'points')
+ *   pointStyle   — 'fill' | 'stroke'                             (default: 'fill')
+ *   showRings    — draw concentric rings alongside sparks        (default: false)
+ *
+ * Any past-recorded session's gallery thumbnail/lightbox is re-rendered
+ * through replay() with these same settings (whatever's currently saved,
+ * not whatever was active when the session was recorded) — see
+ * makeSpiralViz() in dashboard.html and templates/gallery-export-template.html.
  *
  * Palette also drifts on its own, driven by how long the signal has been
  * quiet or busy — see MOOD_IDLE_STAGES / MOOD_ACTIVE_STAGES below. Whenever

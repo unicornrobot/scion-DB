@@ -363,6 +363,20 @@
     };
     const SPARK_LEN = 80;
 
+    // ── Spiral rendering settings ────────────────────────────────────────
+    // Same-origin as viz.html, so this reads the exact settings its admin
+    // panel saves (watchField/sensitivity/sparkField/sparkScale/palette/
+    // sparkStyle/pointStyle/showRings/sparkOpacity) — a bare `new
+    // SacredSpiralVisualizer()` only gets the class's hardcoded defaults.
+    const SACRED_LS_KEY = 'scion-sacred-settings-v2';
+    function currentSpiralSettings() {
+      try { return JSON.parse(localStorage.getItem(SACRED_LS_KEY)) || {}; }
+      catch (_) { return {}; }
+    }
+    function makeSpiralViz() {
+      return Object.assign(new SacredSpiralVisualizer(), currentSpiralSettings());
+    }
+
     // ── Build sparkline rows ──────────────────────────────────────────────
     const sparkHist = Object.fromEntries(FIELDS.map(f => [f, []]));
     const sparkCtxs = {};
@@ -628,7 +642,7 @@
         return;
       }
 
-      const out = new SacredSpiralVisualizer().replay(w, h, series);
+      const out = makeSpiralViz().replay(w, h, series);
       canvas.width  = w;
       canvas.height = h;
       canvas.getContext('2d').drawImage(out, 0, 0);
@@ -694,7 +708,7 @@
         const dpr = window.devicePixelRatio || 1;
         const pxW = Math.round(w * dpr), pxH = Math.round(h * dpr);
 
-        const out = new SacredSpiralVisualizer().replay(pxW, pxH, series);
+        const out = makeSpiralViz().replay(pxW, pxH, series);
         out.style.cssText = `width:${Math.round(w)}px;height:${Math.round(h)}px`;
         loading.style.display = 'none';
         lightboxFrame.appendChild(out);
@@ -840,7 +854,13 @@
       btn.disabled = true;
       btn.textContent = 'Generating…';
       try {
-        const res = await fetch('/api/gallery/export');
+        // The exported file is a standalone document with no access to this
+        // origin's localStorage, so the current Spiral settings are passed
+        // along explicitly and baked into the export at generation time —
+        // otherwise every replay inside the exported gallery would silently
+        // fall back to the class's hardcoded defaults.
+        const settingsParam = encodeURIComponent(JSON.stringify(currentSpiralSettings()));
+        const res = await fetch(`/api/gallery/export?settings=${settingsParam}`);
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
           throw new Error(err.error || `HTTP ${res.status}`);

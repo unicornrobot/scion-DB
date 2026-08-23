@@ -346,13 +346,17 @@ const EXPORT_MAX_POINTS = 3000; // per-field cap for un-snapshotted sessions in 
 // Builds the self-contained "public gallery" HTML: no live server, InfluxDB,
 // WebSocket, or network access required to view it — every session's data is
 // inlined (a cached snapshot PNG as a data URI, or a trimmed series for the
-// page's own SacredSpiralVisualizer.replay() to redraw client-side).
-function buildGalleryExportHtml(sessions) {
+// page's own SacredSpiralVisualizer.replay() to redraw client-side). `settings`
+// is the Spiral admin panel's current config (watchField/sensitivity/
+// sparkField/sparkScale/palette/sparkStyle/pointStyle/showRings/sparkOpacity)
+// baked in at generation time, since the exported page has no access to the
+// dashboard's localStorage to read it itself.
+function buildGalleryExportHtml(sessions, settings) {
   const template = fs.readFileSync(
     path.join(__dirname, 'templates', 'gallery-export-template.html'), 'utf8');
   const spiralSrc = fs.readFileSync(
     path.join(__dirname, 'public', 'js', 'visualizers', 'sacred-spiral.js'), 'utf8');
-  const dataJson = JSON.stringify({ generatedAt: Date.now(), sessions })
+  const dataJson = JSON.stringify({ generatedAt: Date.now(), settings: settings || {}, sessions })
     .replace(/</g, '\\u003c'); // guard against a plant name/notes containing "</script>"
 
   // Function-form replacer: a plain string replacement would misinterpret a
@@ -365,8 +369,11 @@ function buildGalleryExportHtml(sessions) {
 // Exports all sessions flagged `public: true` in meta.json into a single
 // downloadable HTML file — see buildGalleryExportHtml() and
 // templates/gallery-export-template.html.
-app.get('/api/gallery/export', async (_req, res) => {
+app.get('/api/gallery/export', async (req, res) => {
   try {
+    let settings = {};
+    try { settings = JSON.parse(req.query.settings || '{}') || {}; } catch (_) { settings = {}; }
+
     const meta = readJSON(META_FILE, {});
     const publicNames = Object.keys(meta).filter((s) => meta[s]?.public === true);
     if (!publicNames.length) {
@@ -421,7 +428,7 @@ app.get('/api/gallery/export', async (_req, res) => {
       return res.status(400).json({ error: 'No public sessions had usable data.' });
     }
 
-    const html = buildGalleryExportHtml(sessions);
+    const html = buildGalleryExportHtml(sessions, settings);
     const stamp = new Date().toISOString().slice(0, 10);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="scion-public-gallery-${stamp}.html"`);

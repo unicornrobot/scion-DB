@@ -187,6 +187,15 @@
     cx.fillText('no data', w / 2, h / 2);
   }
 
+  // The admin panel's settings at export time (watchField/sensitivity/
+  // sparkField/sparkScale/palette/sparkStyle/pointStyle/showRings/
+  // sparkOpacity) — baked in by the server since this page has no access to
+  // the dashboard's localStorage. A bare `new SacredSpiralVisualizer()`
+  // would otherwise silently fall back to the class's hardcoded defaults.
+  function makeSpiralViz() {
+    return Object.assign(new SacredSpiralVisualizer(), (window.SCION_GALLERY || {}).settings || {});
+  }
+
   // ── Lightbox — adapted from dashboard.html's openLightbox(): no fetch,
   // reads the session that's already in memory. A PNG-backed session shows
   // the same image upscaled (there's no higher-res data to replay); a
@@ -239,7 +248,7 @@
     const dpr = window.devicePixelRatio || 1;
     const pxW = Math.round(w * dpr), pxH = Math.round(h * dpr);
 
-    const out = new SacredSpiralVisualizer().replay(pxW, pxH, series);
+    const out = makeSpiralViz().replay(pxW, pxH, series);
     out.style.cssText = `width:${Math.round(w)}px;height:${Math.round(h)}px`;
     lightboxLoading.style.display = 'none';
     lightboxFrame.appendChild(out);
@@ -283,7 +292,7 @@
         if (hasData) {
           const dpr = window.devicePixelRatio || 1;
           const w = Math.round(240 * dpr), h = Math.round(135 * dpr);
-          const out = new SacredSpiralVisualizer().replay(w, h, series);
+          const out = makeSpiralViz().replay(w, h, series);
           c.width = w; c.height = h;
           c.getContext('2d').drawImage(out, 0, 0);
         } else {
