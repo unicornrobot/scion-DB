@@ -252,6 +252,7 @@
         <option value="sacred" selected>Spiral</option>
         <option value="tapestry">Tapestry</option>
         <option value="coresample">Core Sample</option>
+        <option value="twinthreads">Twin Threads</option>
       </select>
     </div>
 
@@ -668,6 +669,101 @@
       </div>
     </div>
 
+    <!-- Twin Threads settings — shown only when that viz is active -->
+    <div id="twinThreadsSettings" style="display:none">
+      <div class="sb-section">
+        <div class="sb-label">Signal</div>
+        <div class="ap-row">
+          <div class="ap-label"><span>Watch field</span></div>
+          <select class="ap-select" id="ttField">
+            <option value="mean">mean</option>
+            <option value="min">min</option>
+            <option value="max">max</option>
+            <option value="delta">delta</option>
+            <option value="variance">variance</option>
+            <option value="deviation" selected>deviation</option>
+          </select>
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Sensitivity</span>
+            <code id="ttSensDisplay">0.30</code>
+          </div>
+          <input type="range" class="ap-range" id="ttSens" min="0" max="1" step="0.01" value="0.3">
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Activity</span>
+            <span class="ap-current" id="ttCurrent">—</span>
+          </div>
+          <div class="ap-bar-wrap">
+            <div class="ap-bar-fill" id="ttBarFill"></div>
+            <div class="ap-bar-thresh" id="ttBarThresh"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-label">Braid</div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Thread speed</span>
+            <code id="ttSpeedDisplay">1.0</code>
+          </div>
+          <input type="range" class="ap-range" id="ttSpeed" min="0.2" max="4.0" step="0.1" value="1.0">
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Thread thickness</span>
+            <code id="ttThicknessDisplay">2.2</code>
+          </div>
+          <input type="range" class="ap-range" id="ttThickness" min="0.5" max="6" step="0.1" value="2.2">
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Coil frequency</span>
+            <code id="ttCoilFreqDisplay">1.0</code>
+          </div>
+          <input type="range" class="ap-range" id="ttCoilFreq" min="0.2" max="3.0" step="0.1" value="1.0">
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Coil radius</span>
+            <code id="ttCoilRadiusDisplay">9</code>
+          </div>
+          <input type="range" class="ap-range" id="ttCoilRadius" min="2" max="24" step="1" value="9">
+        </div>
+      </div>
+
+      <div class="sb-section">
+        <div class="sb-label">Appearance</div>
+        <div class="ap-row">
+          <div class="ap-label"><span>Palette</span></div>
+          <select class="ap-select" id="ttPalette">
+            <option value="silk"              >Silk      — rose › gold</option>
+            <option value="flax"              >Flax      — sage › wheat</option>
+            <option value="indigo" selected   >Indigo    — dye-blue › cyan</option>
+            <option value="copper"            >Copper    — rust › amber</option>
+            <option value="gossamer"          >Gossamer  — violet › ice</option>
+          </select>
+        </div>
+        <div class="ap-row">
+          <div class="ap-label">
+            <span>Envelope opacity</span>
+            <code id="ttEnvOpacityDisplay">0.16</code>
+          </div>
+          <input type="range" class="ap-range" id="ttEnvOpacity" min="0.02" max="0.5" step="0.01" value="0.16">
+        </div>
+        <div class="ap-row" style="display:flex;align-items:center;gap:8px">
+          <input type="checkbox" id="ttShowEnvelope" checked style="accent-color:var(--accent);width:14px;height:14px;cursor:pointer;flex-shrink:0">
+          <label for="ttShowEnvelope" style="font-size:11px;color:var(--muted);cursor:pointer">Show envelope band</label>
+        </div>
+        <div class="ap-row">
+          <button class="ap-btn" id="ttReset">Clear braid</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Audio stream -->
     <div class="sb-section" id="audioSection">
       <div class="sb-label">Audio stream</div>
@@ -735,6 +831,7 @@
   <script src="/js/visualizers/sacred-spiral.js"></script>
   <script src="/js/visualizers/tapestry.js"></script>
   <script src="/js/visualizers/core-sample.js"></script>
+  <script src="/js/visualizers/twin-threads.js"></script>
   <script>
     // ── Boot ──────────────────────────────────────────────────────────────
     const canvas      = document.getElementById('viz');
@@ -743,21 +840,24 @@
     const physarumViz = new PhysarumVisualizer();
     const plantViz    = new PlantSignalVisualizer();
     const tapestryViz   = new TapestryVisualizer();
-    const coreSampleViz = new CoreSampleVisualizer();
+    const coreSampleViz  = new CoreSampleVisualizer();
+    const twinThreadsViz = new TwinThreadsVisualizer();
 
     engine.register('plant',      plantViz);
     engine.register('organic',    physarumViz);
     engine.register('sacred',     sacredViz);
     engine.register('tapestry',   tapestryViz);
     engine.register('coresample', coreSampleViz);
+    engine.register('twinthreads', twinThreadsViz);
     engine.activate('sacred');
 
-    const sidebar            = document.getElementById('sidebar');
-    const sacredSettings     = document.getElementById('sacredSettings');
-    const organicSettings    = document.getElementById('organicSettings');
-    const plantSettings      = document.getElementById('plantSettings');
-    const tapestrySettings   = document.getElementById('tapestrySettings');
-    const coreSampleSettings = document.getElementById('coreSampleSettings');
+    const sidebar             = document.getElementById('sidebar');
+    const sacredSettings      = document.getElementById('sacredSettings');
+    const organicSettings     = document.getElementById('organicSettings');
+    const plantSettings       = document.getElementById('plantSettings');
+    const tapestrySettings    = document.getElementById('tapestrySettings');
+    const coreSampleSettings  = document.getElementById('coreSampleSettings');
+    const twinThreadsSettings = document.getElementById('twinThreadsSettings');
 
     document.getElementById('sidebarToggle').addEventListener('click', () => {
       sidebar.classList.toggle('open');
@@ -776,8 +876,9 @@
       sacredSettings.style.display     = name === 'sacred'     ? '' : 'none';
       organicSettings.style.display    = name === 'organic'    ? '' : 'none';
       plantSettings.style.display      = name === 'plant'      ? '' : 'none';
-      tapestrySettings.style.display   = name === 'tapestry'   ? '' : 'none';
-      coreSampleSettings.style.display = name === 'coresample' ? '' : 'none';
+      tapestrySettings.style.display    = name === 'tapestry'    ? '' : 'none';
+      coreSampleSettings.style.display  = name === 'coresample'  ? '' : 'none';
+      twinThreadsSettings.style.display = name === 'twinthreads' ? '' : 'none';
       localStorage.setItem('scion-active-viz', name);
     }
 
@@ -1373,6 +1474,139 @@
       csBarFill.style.width  = Math.min(norm * 100, 100) + '%';
       csBarFill.classList.toggle('over', over);
       csBarThresh.style.left = Math.min(sens * 100, 100) + '%';
+    }, 100);
+
+    // ── Twin Threads panel wiring ──────────────────────────────────────────
+    const ttField             = document.getElementById('ttField');
+    const ttSens              = document.getElementById('ttSens');
+    const ttSensDisplay       = document.getElementById('ttSensDisplay');
+    const ttCurrent           = document.getElementById('ttCurrent');
+    const ttBarFill           = document.getElementById('ttBarFill');
+    const ttBarThresh         = document.getElementById('ttBarThresh');
+    const ttSpeed             = document.getElementById('ttSpeed');
+    const ttSpeedDisplay      = document.getElementById('ttSpeedDisplay');
+    const ttThickness         = document.getElementById('ttThickness');
+    const ttThicknessDisplay  = document.getElementById('ttThicknessDisplay');
+    const ttCoilFreq          = document.getElementById('ttCoilFreq');
+    const ttCoilFreqDisplay   = document.getElementById('ttCoilFreqDisplay');
+    const ttCoilRadius        = document.getElementById('ttCoilRadius');
+    const ttCoilRadiusDisplay = document.getElementById('ttCoilRadiusDisplay');
+    const ttPalette           = document.getElementById('ttPalette');
+    const ttEnvOpacity        = document.getElementById('ttEnvOpacity');
+    const ttEnvOpacityDisplay = document.getElementById('ttEnvOpacityDisplay');
+    const ttShowEnvelope      = document.getElementById('ttShowEnvelope');
+    const ttReset             = document.getElementById('ttReset');
+
+    const TWINTHREADS_LS_KEY = 'scion-twinthreads-settings-v1';
+
+    function saveTwinThreadsSettings() {
+      try {
+        localStorage.setItem(TWINTHREADS_LS_KEY, JSON.stringify({
+          watchField:         twinThreadsViz.watchField,
+          sensitivity:        twinThreadsViz.sensitivity,
+          threadSpeed:        twinThreadsViz.threadSpeed,
+          threadThickness:    twinThreadsViz.threadThickness,
+          coilFrequencyScale: twinThreadsViz.coilFrequencyScale,
+          coilRadius:         twinThreadsViz.coilRadius,
+          palette:            twinThreadsViz.palette,
+          envelopeOpacity:    twinThreadsViz.envelopeOpacity,
+          showEnvelope:       twinThreadsViz.showEnvelope,
+        }));
+      } catch (_) {}
+    }
+
+    function loadTwinThreadsSettings() {
+      let saved = {};
+      try { saved = JSON.parse(localStorage.getItem(TWINTHREADS_LS_KEY)) || {}; } catch (_) {}
+      if (saved.watchField         != null) { ttField.value      = saved.watchField;         twinThreadsViz.watchField         = saved.watchField;         }
+      if (saved.sensitivity        != null) { ttSens.value       = saved.sensitivity;        twinThreadsViz.sensitivity        = saved.sensitivity;        }
+      if (saved.threadSpeed        != null) { ttSpeed.value      = saved.threadSpeed;        twinThreadsViz.threadSpeed        = saved.threadSpeed;        }
+      if (saved.threadThickness    != null) { ttThickness.value  = saved.threadThickness;    twinThreadsViz.threadThickness    = saved.threadThickness;    }
+      if (saved.coilFrequencyScale != null) { ttCoilFreq.value   = saved.coilFrequencyScale; twinThreadsViz.coilFrequencyScale = saved.coilFrequencyScale; }
+      if (saved.coilRadius         != null) { ttCoilRadius.value = saved.coilRadius;         twinThreadsViz.coilRadius         = saved.coilRadius;         }
+      if (saved.palette            != null) { ttPalette.value    = saved.palette;            twinThreadsViz.palette            = saved.palette;            }
+      if (saved.envelopeOpacity    != null) { ttEnvOpacity.value = saved.envelopeOpacity;    twinThreadsViz.envelopeOpacity    = saved.envelopeOpacity;    }
+      if (saved.showEnvelope       != null) { ttShowEnvelope.checked = saved.showEnvelope;    twinThreadsViz.showEnvelope       = saved.showEnvelope;       }
+      ttSensDisplay.textContent       = twinThreadsViz.sensitivity.toFixed(2);
+      ttSpeedDisplay.textContent      = twinThreadsViz.threadSpeed.toFixed(1);
+      ttThicknessDisplay.textContent  = twinThreadsViz.threadThickness.toFixed(1);
+      ttCoilFreqDisplay.textContent   = twinThreadsViz.coilFrequencyScale.toFixed(1);
+      ttCoilRadiusDisplay.textContent = String(twinThreadsViz.coilRadius);
+      ttEnvOpacityDisplay.textContent = twinThreadsViz.envelopeOpacity.toFixed(2);
+    }
+
+    loadTwinThreadsSettings();
+
+    ttField.addEventListener('change', () => {
+      twinThreadsViz.watchField = ttField.value;
+      saveTwinThreadsSettings();
+    });
+
+    ttSens.addEventListener('input', () => {
+      const v = parseFloat(ttSens.value);
+      ttSensDisplay.textContent = v.toFixed(2);
+      twinThreadsViz.sensitivity = v;
+      saveTwinThreadsSettings();
+    });
+
+    ttSpeed.addEventListener('input', () => {
+      const v = parseFloat(ttSpeed.value);
+      ttSpeedDisplay.textContent = v.toFixed(1);
+      twinThreadsViz.threadSpeed = v;
+      saveTwinThreadsSettings();
+    });
+
+    ttThickness.addEventListener('input', () => {
+      const v = parseFloat(ttThickness.value);
+      ttThicknessDisplay.textContent = v.toFixed(1);
+      twinThreadsViz.threadThickness = v;
+      saveTwinThreadsSettings();
+    });
+
+    ttCoilFreq.addEventListener('input', () => {
+      const v = parseFloat(ttCoilFreq.value);
+      ttCoilFreqDisplay.textContent = v.toFixed(1);
+      twinThreadsViz.coilFrequencyScale = v;
+      saveTwinThreadsSettings();
+    });
+
+    ttCoilRadius.addEventListener('input', () => {
+      const v = parseInt(ttCoilRadius.value, 10);
+      ttCoilRadiusDisplay.textContent = String(v);
+      twinThreadsViz.coilRadius = v;
+      saveTwinThreadsSettings();
+    });
+
+    ttPalette.addEventListener('change', () => {
+      twinThreadsViz.palette = ttPalette.value;
+      saveTwinThreadsSettings();
+    });
+
+    ttEnvOpacity.addEventListener('input', () => {
+      const v = parseFloat(ttEnvOpacity.value);
+      ttEnvOpacityDisplay.textContent = v.toFixed(2);
+      twinThreadsViz.envelopeOpacity = v;
+      saveTwinThreadsSettings();
+    });
+
+    ttShowEnvelope.addEventListener('change', () => {
+      twinThreadsViz.showEnvelope = ttShowEnvelope.checked;
+      saveTwinThreadsSettings();
+    });
+
+    ttReset.addEventListener('click', () => twinThreadsViz.clearTrail());
+
+    // Live activity bar for Twin Threads
+    setInterval(() => {
+      if (twinThreadsSettings.style.display === 'none') return;
+      const norm = twinThreadsViz._normChange || 0;
+      const sens = twinThreadsViz.sensitivity;
+      const over = norm > sens;
+      ttCurrent.textContent = norm.toFixed(2);
+      ttCurrent.classList.toggle('over', over);
+      ttBarFill.style.width  = Math.min(norm * 100, 100) + '%';
+      ttBarFill.classList.toggle('over', over);
+      ttBarThresh.style.left = Math.min(sens * 100, 100) + '%';
     }, 100);
 
     engine.onConnectionChange = (live) => {
