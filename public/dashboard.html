@@ -163,6 +163,7 @@
       display: flex; align-items: baseline; justify-content: space-between;
       margin-bottom: 16px;
     }
+    .gallery-header-actions { display: flex; gap: 8px; }
     .gallery-export-btn {
       padding: 7px 14px; border-radius: 7px; border: 1px solid var(--plant);
       background: transparent; color: var(--plant-l);
@@ -171,6 +172,14 @@
     }
     .gallery-export-btn:hover { background: rgba(58,125,68,.15); }
     .gallery-export-btn:disabled { opacity: .5; cursor: default; }
+    .gallery-ghost-btn {
+      padding: 7px 14px; border-radius: 7px; border: 1px solid var(--border-l);
+      background: transparent; color: var(--muted);
+      font-size: 11px; font-weight: 600; cursor: pointer;
+      transition: background .15s, color .15s, border-color .15s;
+    }
+    .gallery-ghost-btn:hover { color: var(--fg); border-color: var(--plant); }
+    .gallery-ghost-btn:disabled { opacity: .5; cursor: default; }
     .gallery-empty {
       color: var(--muted); font-size: 12px; padding: 32px 0;
       text-align: center; border: 1px dashed var(--border);
@@ -340,7 +349,10 @@
     <!-- Gallery -->
     <div class="gallery-header">
       <div class="section-label" style="margin-bottom:0">Recordings</div>
-      <button type="button" class="gallery-export-btn" id="exportGalleryBtn" title="Bundle every session marked Public into one self-contained HTML file you can share anywhere">Export public gallery</button>
+      <div class="gallery-header-actions">
+        <button type="button" class="gallery-ghost-btn" id="clearCacheBtn" title="Redraw every thumbnail from scratch — use this after changing Spiral settings so old cached thumbnails pick them up">Clear thumbnail cache</button>
+        <button type="button" class="gallery-export-btn" id="exportGalleryBtn" title="Bundle every session marked Public into one self-contained HTML file you can share anywhere">Export public gallery</button>
+      </div>
     </div>
     <div id="gallery"><div class="gallery-empty">No recordings found.</div></div>
 
@@ -539,6 +551,8 @@
               document.querySelectorAll('.card-del, .card-public-toggle').forEach(b => b.style.display = 'none');
               const exportBtn = document.getElementById('exportGalleryBtn');
               if (exportBtn) exportBtn.style.display = 'none';
+              const clearBtn = document.getElementById('clearCacheBtn');
+              if (clearBtn) clearBtn.style.display = 'none';
             }
           }
         } catch (_) {}
@@ -842,6 +856,30 @@
     }
 
     loadGallery();
+
+    // ── Clear thumbnail cache ────────────────────────────────────────────
+    // Deletes every cached snapshot PNG server-side and clears its flags, then
+    // reloads the gallery so each card falls back to the canvas+reconstruct
+    // path and redraws with whatever Spiral settings are current right now —
+    // the only way to refresh a thumbnail that was cached under old settings.
+    document.getElementById('clearCacheBtn').addEventListener('click', async () => {
+      if (!confirm('Redraw every recording\'s thumbnail from scratch?\n\nUseful after changing Spiral settings — cached thumbnails otherwise never update.')) return;
+      const btn = document.getElementById('clearCacheBtn');
+      const original = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = 'Clearing…';
+      try {
+        const res = await fetch('/api/gallery/clear-cache', { method: 'POST' });
+        const d = await res.json();
+        if (!res.ok || !d.ok) throw new Error(d.error || `HTTP ${res.status}`);
+        await loadGallery();
+      } catch (err) {
+        alert(`Could not clear cache: ${err.message}`);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = original;
+      }
+    });
 
     // ── Public gallery export ────────────────────────────────────────────
     // Fetch + blob + a synthesized <a download> click, rather than a plain

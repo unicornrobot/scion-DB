@@ -39,6 +39,14 @@ function writeJSON(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
 }
 
+// Sanitizes a session name into a safe snapshot filename stem.
+function safeSessionName(name) {
+  return name.replace(/[^a-zA-Z0-9_\-]/g, '_');
+}
+function snapshotPath(name) {
+  return path.join(SNAP_DIR, `${safeSessionName(name)}.png`);
+}
+
 // ---------------------------------------------------------------------------
 // State: latest values accumulated across OSC messages, and recording state.
 // ---------------------------------------------------------------------------
@@ -171,15 +179,14 @@ app.post('/api/sessions/:name/snapshot', (req, res) => {
     return res.status(400).json({ error: 'invalid dataUrl' });
   }
   const base64 = dataUrl.replace(/^data:image\/png;base64,/, '');
-  const safe   = req.params.name.replace(/[^a-zA-Z0-9_\-]/g, '_');
-  const file   = path.join(SNAP_DIR, `${safe}.png`);
+  const file   = snapshotPath(req.params.name);
   try {
     fs.writeFileSync(file, Buffer.from(base64, 'base64'));
     // Mark session as having a snapshot in meta.json
     const meta = readJSON(META_FILE, {});
     meta[req.params.name] = { ...(meta[req.params.name] || {}), hasSnapshot: true };
     writeJSON(META_FILE, meta);
-    res.json({ ok: true, url: `/snapshots/${safe}.png` });
+    res.json({ ok: true, url: `/snapshots/${safeSessionName(req.params.name)}.png` });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -311,13 +318,23 @@ app.get('/api/sessions', async (_req, res) => {
 
     const meta = readJSON(META_FILE, {});
     const sessions = Object.keys(startMap)
-      .map((s) => ({
-        session: s,
-        startMs: startMap[s],
-        endMs:   endMap[s]   ?? startMap[s],
-        points:  countMap[s] ?? 0,
-        ...(meta[s] || {}),
-      }))
+      .map((s) => {
+        const m = meta[s] || {};
+        // Trust the actual file over the meta.json flags — keeps the gallery
+        // self-healing if a snapshot is ever cleared/deleted without the
+        // corresponding meta fields being reset (e.g. /api/gallery/clear-cache,
+        // or a manual `rm` on the Pi) rather than serving a broken <img>.
+        const hasSnapshot = Boolean(m.hasSnapshot) && fs.existsSync(snapshotPath(s));
+        return {
+          session: s,
+          startMs: startMap[s],
+          endMs:   endMap[s]   ?? startMap[s],
+          points:  countMap[s] ?? 0,
+          ...m,
+          hasSnapshot,
+          reconstructed: hasSnapshot,
+        };
+      })
       .sort((a, b) => b.endMs - a.endMs);
 
     res.json({ sessions });
@@ -406,8 +423,7 @@ app.get('/api/gallery/export', async (req, res) => {
         points: countMap[name] ?? 0,
         plant: m.plant || null,
       };
-      const safe = name.replace(/[^a-zA-Z0-9_\-]/g, '_');
-      const snapFile = path.join(SNAP_DIR, `${safe}.png`);
+      const snapFile = snapshotPath(name);
 
       // Sequential, not parallel — bounds InfluxDB load; this is a rare,
       // owner-triggered action rather than a hot path.
@@ -436,6 +452,25 @@ app.get('/api/gallery/export', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Clears every cached Spiral thumbnail (snapshot PNG + hasSnapshot/reconstructed
+// flags) so the gallery redraws each session from scratch on next load — the
+// only way to refresh thumbnails that were cached under old rendering settings,
+// since a cached snapshot is otherwise never re-rendered once reconstructed.
+app.post('/api/gallery/clear-cache', (_req, res) => {
+  const meta = readJSON(META_FILE, {});
+  let cleared = 0;
+  for (const name of Object.keys(meta)) {
+    const m = meta[name];
+    if (!m.hasSnapshot && !m.reconstructed) continue;
+    try { fs.unlinkSync(snapshotPath(name)); } catch (_) {}
+    delete m.hasSnapshot;
+    delete m.reconstructed;
+    cleared++;
+  }
+  writeJSON(META_FILE, meta);
+  res.json({ ok: true, cleared });
 });
 
 app.post('/api/record/start', (req, res) => {
@@ -523,9 +558,7 @@ app.delete('/api/sessions/:name', async (req, res) => {
   } catch (_) {}
 
   // 3. Remove snapshot if present
-  const safe = name.replace(/[^a-zA-Z0-9_\-]/g, '_');
-  const snapFile = path.join(SNAP_DIR, `${safe}.png`);
-  try { fs.unlinkSync(snapFile); } catch (_) {}
+  try { fs.unlinkSync(snapshotPath(name)); } catch (_) {}
 
   console.log(`[record] deleted session=${name}`);
   res.json({ ok: true });
